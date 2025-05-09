@@ -62,6 +62,7 @@ $paypal_email = isset($paypal_email) ? $paypal_email : get_option('wppps_paypal_
         
         <form id="paypal_form" name="paypal_form" action="https://www.sandbox.paypal.com/cgi-bin/webscr" method="post">
             <input type="hidden" name="business" value="<?php echo esc_attr($paypal_email); ?>">
+            <input type="hidden" name="invoice" value="<?php echo esc_attr($order_id); ?>">
             <input type="hidden" name="cmd" value="_cart">
             <input type="hidden" name="upload" value="1">
             
@@ -69,18 +70,20 @@ $paypal_email = isset($paypal_email) ? $paypal_email : get_option('wppps_paypal_
                 <input type="hidden" name="<?php echo esc_attr($key); ?>" value="<?php echo esc_attr($value); ?>">
             <?php endforeach; ?>
             
-            <!-- Add custom field with client data -->
             <input type="hidden" name="custom" value="<?php echo esc_attr(json_encode(array(
                 'client_site' => $client_site,
                 'order_id' => $order_id,
                 'order_key' => $order_key,
-                'token' => $security_token
+                'token' => $security_token,
+                'session_id' => isset($_GET['session_id']) ? $_GET['session_id'] : ''
             ))); ?>">
+                        
             
-            <!-- Return URLs back to this server -->
-            <input type="hidden" name="return" value="<?php echo esc_url(site_url('/wc-api/wppps-standard-return')); ?>">
-            <input type="hidden" name="cancel_return" value="<?php echo esc_url(site_url('/wc-api/wppps-standard-cancel')); ?>">
-            <input type="hidden" name="notify_url" value="<?php echo esc_url(site_url('/wc-api/wppps-standard-ipn')); ?>">
+           <!-- Return URLs back to this server -->
+           <input type="hidden" name="return" value="<?php echo esc_url(add_query_arg('session_id', isset($_GET['session_id']) ? $_GET['session_id'] : '', rest_url('wppps/v1/standard-return'))); ?>">
+            <input type="hidden" name="cancel_return" value="<?php echo esc_url(add_query_arg('session_id', isset($_GET['session_id']) ? $_GET['session_id'] : '', rest_url('wppps/v1/standard-cancel'))); ?>">
+            <input type="hidden" name="notify_url" value="<?php echo esc_url(rest_url('wppps/v1/standard-ipn')); ?>">
+                        
             
             <noscript>
                 <input type="submit" value="Click here if you are not redirected automatically" />

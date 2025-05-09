@@ -2261,7 +2261,7 @@ public function mirror_order($request) {
  * Process PayPal Standard bridge
  */
 public function get_standard_bridge($request) {
-    // Get parameters
+      // Get parameters
     $order_id = $request->get_param('order_id');
     $order_key = $request->get_param('order_key');
     $client_site = $request->get_param('client_site');
@@ -2269,11 +2269,25 @@ public function get_standard_bridge($request) {
     $client_cancel_url = $request->get_param('cancel_url');
     $security_token = $request->get_param('token');
     $api_key = $request->get_param('api_key');
+    $session_id = $request->get_param('session_id');
     
     // Validate API key
     $site = $this->get_site_by_api_key($api_key);
     if (!$site) {
         return new WP_Error('invalid_api_key', 'Invalid API key', array('status' => 401));
+    }
+    
+    // CRITICAL FIX: Store the session ID -> order ID mapping on THIS SERVER
+    if (!empty($session_id) && !empty($order_id)) {
+        // Store in transient for 1 hour
+        $transient_key = 'paypal_session_' . $session_id;
+        set_transient($transient_key, [
+            'order_id' => $order_id,
+            'client_site' => $client_site,
+            'order_key' => $order_key
+        ], 3600);
+        
+        error_log('Standard Bridge: Stored mapping - session ' . $session_id . ' -> order ' . $order_id);
     }
     
     // Create order in local system to track this transaction
@@ -2379,9 +2393,10 @@ public function handle_standard_ipn($request) {
     // Parse IPN data
     parse_str($raw_post_data, $ipn_vars);
     
-    // Get transaction details
+  // Get transaction details
     $payment_status = isset($ipn_vars['payment_status']) ? $ipn_vars['payment_status'] : '';
     $txn_id = isset($ipn_vars['txn_id']) ? $ipn_vars['txn_id'] : '';
+    $invoice = isset($ipn_vars['invoice']) ? $ipn_vars['invoice'] : '';
     $receiver_email = isset($ipn_vars['receiver_email']) ? $ipn_vars['receiver_email'] : '';
     $payer_email = isset($ipn_vars['payer_email']) ? $ipn_vars['payer_email'] : '';
     $mc_gross = isset($ipn_vars['mc_gross']) ? $ipn_vars['mc_gross'] : '';
@@ -2390,6 +2405,13 @@ public function handle_standard_ipn($request) {
     // Extract client data from custom field
     $client_site = isset($custom['client_site']) ? $custom['client_site'] : '';
     $order_id = isset($custom['order_id']) ? $custom['order_id'] : '';
+    
+    // IMPORTANT: Use invoice to guarantee we're using the correct order ID
+    if (!empty($invoice)) {
+        error_log('Using invoice number for order ID: ' . $invoice);
+        $order_id = $invoice;
+    }
+    
     $order_key = isset($custom['order_key']) ? $custom['order_key'] : '';
     $security_token = isset($custom['token']) ? $custom['token'] : '';
     
@@ -2408,7 +2430,7 @@ public function handle_standard_ipn($request) {
         return false;
     }
     
-    // Store IPN data
+    // Store IPN data with correct order ID
     $this->log_ipn_transaction($site->id, $order_id, $txn_id, $payment_status, $ipn_vars);
     
     // Forward IPN to client site
@@ -2449,106 +2471,128 @@ public function handle_standard_ipn($request) {
  * Handle PayPal return
  */
 public function handle_standard_return($request) {
-    // Get custom data
-    $custom = isset($_GET['custom']) ? json_decode(stripslashes($_GET['custom']), true) : array();
+    // Get session ID from URL
+    $session_id = isset($_GET['session_id']) ? sanitize_text_field($_GET['session_id']) : '';
     
-    // Extract client data
-    $client_site = isset($custom['client_site']) ? $custom['client_site'] : '';
-    $order_id = isset($custom['order_id']) ? $custom['order_id'] : '';
-    $order_key = isset($custom['order_key']) ? $custom['order_key'] : '';
-    $security_token = isset($custom['token']) ? $custom['token'] : '';
+    error_log('PayPal Return: Looking for session ' . $session_id);
     
-    if (empty($client_site) || empty($order_id)) {
-        wp_die('Invalid return data');
+    // SIMPLE FIX: Lookup the order ID from the session mapping on THIS SERVER
+    if (!empty($session_id)) {
+        $transient_key = 'paypal_session_' . $session_id;
+        $session_data = get_transient($transient_key);
+        
+        if ($session_data && isset($session_data['order_id'])) {
+            $order_id = $session_data['order_id'];
+            $client_site = $session_data['client_site'];
+            $order_key = $session_data['order_key'];
+            
+            error_log('PayPal Return: Found order ' . $order_id . ' for session ' . $session_id);
+            
+            // Find site by URL
+            global $wpdb;
+            $sites_table = $wpdb->prefix . 'wppps_sites';
+            $site = $wpdb->get_row($wpdb->prepare(
+                "SELECT * FROM $sites_table WHERE site_url = %s OR site_url = %s OR site_url = %s",
+                $client_site,
+                rtrim($client_site, '/'),
+                $client_site . '/'
+            ));
+            
+            if (!$site) {
+                wp_die('Site not found');
+            }
+            
+            // Generate secure return URL
+            $timestamp = time();
+            $hash_data = $timestamp . $order_id . $site->api_key;
+            $hash = hash_hmac('sha256', $hash_data, $site->api_secret);
+            
+            // Build return URL
+            $return_url = trailingslashit($client_site) . 'wc-api/wpppc-standard-return';
+            
+            // Add parameters
+            $return_url = add_query_arg(array(
+                'order_id' => $order_id,
+                'order_key' => $order_key,
+                'status' => 'success',
+                'timestamp' => $timestamp,
+                'hash' => $hash
+            ), $return_url);
+            
+            // Redirect to client site
+            wp_redirect($return_url);
+            exit;
+        } else {
+            error_log('PayPal Return: No session data found for ' . $session_id);
+        }
     }
     
-    // Find site by URL
-    global $wpdb;
-    $sites_table = $wpdb->prefix . 'wppps_sites';
-    $site = $wpdb->get_row($wpdb->prepare(
-        "SELECT * FROM $sites_table WHERE site_url = %s OR site_url = %s OR site_url = %s",
-        $client_site,
-        rtrim($client_site, '/'),
-        $client_site . '/'
-    ));
-    
-    if (!$site) {
-        wp_die('Site not found');
-    }
-    
-    // Generate secure return URL
-    $timestamp = time();
-    $hash_data = $timestamp . $order_id . $site->api_key;
-    $hash = hash_hmac('sha256', $hash_data, $site->api_secret);
-    
-    // Build return URL
-    $return_url = trailingslashit($client_site) . 'wc-api/wpppc-standard-return';
-    
-    // Add parameters
-    $return_url = add_query_arg(array(
-        'order_id' => $order_id,
-        'order_key' => $order_key,
-        'status' => 'success',
-        'timestamp' => $timestamp,
-        'hash' => $hash
-    ), $return_url);
-    
-    // Redirect to client site
-    wp_redirect($return_url);
-    exit;
+    // If we get here, we couldn't find the session data
+    wp_die('Could not determine your order. Please check your email for order confirmation or contact support.');
 }
 
 /**
  * Handle PayPal cancellation
  */
 public function handle_standard_cancel($request) {
-    // Get custom data
-    $custom = isset($_GET['custom']) ? json_decode(stripslashes($_GET['custom']), true) : array();
+    // Get session ID from URL
+    $session_id = isset($_GET['session_id']) ? sanitize_text_field($_GET['session_id']) : '';
     
-    // Extract client data
-    $client_site = isset($custom['client_site']) ? $custom['client_site'] : '';
-    $order_id = isset($custom['order_id']) ? $custom['order_id'] : '';
-    $order_key = isset($custom['order_key']) ? $custom['order_key'] : '';
-    $security_token = isset($custom['token']) ? $custom['token'] : '';
+    error_log('PayPal Cancel: Looking for session ' . $session_id);
     
-    if (empty($client_site) || empty($order_id)) {
-        wp_die('Invalid return data');
+    // Lookup the order ID from the session mapping on THIS SERVER
+    if (!empty($session_id)) {
+        $transient_key = 'paypal_session_' . $session_id;
+        $session_data = get_transient($transient_key);
+        
+        if ($session_data && isset($session_data['order_id'])) {
+            $order_id = $session_data['order_id'];
+            $client_site = $session_data['client_site'];
+            $order_key = $session_data['order_key'];
+            
+            error_log('PayPal Cancel: Found order ' . $order_id . ' for session ' . $session_id);
+            
+            // Find site by URL
+            global $wpdb;
+            $sites_table = $wpdb->prefix . 'wppps_sites';
+            $site = $wpdb->get_row($wpdb->prepare(
+                "SELECT * FROM $sites_table WHERE site_url = %s OR site_url = %s OR site_url = %s",
+                $client_site,
+                rtrim($client_site, '/'),
+                $client_site . '/'
+            ));
+            
+            if (!$site) {
+                wp_die('Site not found');
+            }
+            
+            // Generate secure return URL
+            $timestamp = time();
+            $hash_data = $timestamp . $order_id . $site->api_key;
+            $hash = hash_hmac('sha256', $hash_data, $site->api_secret);
+            
+            // Build return URL
+            $return_url = trailingslashit($client_site) . 'wc-api/wpppc-standard-cancel';
+            
+            // Add parameters
+            $return_url = add_query_arg(array(
+                'order_id' => $order_id,
+                'order_key' => $order_key,
+                'status' => 'cancelled',
+                'timestamp' => $timestamp,
+                'hash' => $hash
+            ), $return_url);
+            
+            // Redirect to client site
+            wp_redirect($return_url);
+            exit;
+        } else {
+            error_log('PayPal Cancel: No session data found for ' . $session_id);
+        }
     }
     
-    // Find site by URL
-    global $wpdb;
-    $sites_table = $wpdb->prefix . 'wppps_sites';
-    $site = $wpdb->get_row($wpdb->prepare(
-        "SELECT * FROM $sites_table WHERE site_url = %s OR site_url = %s OR site_url = %s",
-        $client_site,
-        rtrim($client_site, '/'),
-        $client_site . '/'
-    ));
-    
-    if (!$site) {
-        wp_die('Site not found');
-    }
-    
-    // Generate secure return URL
-    $timestamp = time();
-    $hash_data = $timestamp . $order_id . $site->api_key;
-    $hash = hash_hmac('sha256', $hash_data, $site->api_secret);
-    
-    // Build return URL
-    $return_url = trailingslashit($client_site) . 'wc-api/wpppc-standard-cancel';
-    
-    // Add parameters
-    $return_url = add_query_arg(array(
-        'order_id' => $order_id,
-        'order_key' => $order_key,
-        'status' => 'cancelled',
-        'timestamp' => $timestamp,
-        'hash' => $hash
-    ), $return_url);
-    
-    // Redirect to client site
-    wp_redirect($return_url);
-    exit;
+    // If we get here, we couldn't find the session data
+    wp_die('Could not determine your order. Please check your email for order confirmation or contact support.');
 }
 
 /**

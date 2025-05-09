@@ -1268,6 +1268,25 @@ add_filter('woocommerce_order_calculate_totals', function($and_taxes, $order) {
 
 
 /**
+ * Helper function to get local order ID by remote order ID
+ */
+function wppps_get_local_order_id_by_remote_id($remote_order_id) {
+    global $wpdb;
+    $meta_key = '_wppps_client_order_id';
+    
+    $query = $wpdb->prepare(
+        "SELECT post_id FROM {$wpdb->postmeta} 
+         WHERE meta_key = %s AND meta_value = %s 
+         ORDER BY meta_id DESC LIMIT 1",
+        $meta_key,
+        $remote_order_id
+    );
+    
+    $post_id = $wpdb->get_var($query);
+    return $post_id;
+}
+
+/**
  * Plugin deactivation hook
  */
 function wppps_deactivate() {
