@@ -271,7 +271,15 @@ if (!empty($params['line_items']) && is_array($params['line_items'])) {
     if (isset($params['tax_total'])) {
         $data_to_store['tax_total'] = (float)$params['tax_total'];
         error_log('STORE DATA - Received tax total: ' . $params['tax_total']);
+        
     }
+    
+    if (isset($params['discount_total'])) {
+        $data_to_store['discount_total'] = (float)$params['discount_total'];
+        error_log('STORE DATA - Received tax total: ' . $params['discount_total']);
+        
+    }
+    
     
     // Store currency if provided
     if (isset($params['currency'])) {
@@ -447,6 +455,10 @@ private function get_test_data($site_id, $order_id) {
         
         // Decode order data
         $order_data = json_decode(base64_decode($order_data_encoded), true);
+        
+        error_log('Retrieved mine data: ' . json_encode($order_data));
+
+        
         
         if (empty($order_data) || !is_array($order_data)) {
             return new WP_Error(
@@ -698,6 +710,12 @@ public function create_paypal_order($request) {
     // Add tax total if available
     if (isset($order_data['tax_total'])) {
         $custom_data['tax_total'] = $order_data['tax_total'];
+    }
+    
+    // Add discount total if available
+    if (isset($order_data['discount_total'])) {
+        $custom_data['discount_total'] = $order_data['discount_total'];
+        error_log('Adding discount to PayPal order: ' . $order_data['discount_total']);
     }
     
     // Create PayPal order
