@@ -2416,6 +2416,11 @@ if ($shipping_address) {
         $paypal_args['tax_cart'] = $tax_amount;
     }
     
+    $discount = $request->get_param('discount_total');
+    if (!empty($discount)){
+        $paypal_args['discount_amount_cart'] = $discount;
+    }
+    
     // Get PayPal email
     $paypal_email = get_option('wppps_paypal_standard_email', '');
     // Check if PayPal email is set
@@ -2796,9 +2801,7 @@ public function handle_standard_cancel($request) {
 
 
  
-/**
- * Create a fully populated tracking order with client data
- */
+
 /**
  * Create a fully populated tracking order with client data
  */
@@ -2942,6 +2945,22 @@ if (!$product) {
         $order->add_item($shipping_item);
         
         error_log("Added shipping: $shipping_amount");
+    }
+    // Add discount
+    $discount_amount = isset($_GET['discount_total']) ? floatval($_GET['discount_total']) : 0;
+    if ($discount_amount > 0) {
+        $discount_item = new WC_Order_Item_Coupon();
+        $discount_item->set_props(array(
+            'code'         => 'Discount',
+            'discount'     => $discount_amount,
+            'discount_tax' => 0,
+        ));
+        $order->add_item($discount_item);
+        
+        error_log("Added discount: $discount_amount");
+        
+        // Subtract discount from subtotal for correct calculations
+        $subtotal -= $discount_amount;
     }
     
 $order->calculate_totals(); // Recalculate totals
