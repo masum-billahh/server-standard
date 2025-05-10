@@ -2303,6 +2303,31 @@ $address_override = $request->get_param('address_override') ? '1' : '0';
     $items_json = $request->get_param('items');
     $items = json_decode(base64_decode($items_json), true);
     
+    // Process items for mapped products BEFORE sending to PayPal
+    if (!empty($items) && is_array($items)) {
+        // Validate API key
+        $site = $this->get_site_by_api_key($api_key);
+        if ($site) {
+            foreach ($items as $key => $item) {
+                // Look for mapped product ID
+                if (!empty($item['mapped_product_id'])) {
+                    $mapped_product_id = intval($item['mapped_product_id']);
+                    $mapped_product = wc_get_product($mapped_product_id);
+                    
+                    if ($mapped_product) {
+                        // Override name with mapped product name for PayPal display
+                        $items[$key]['name'] = $mapped_product->get_name();
+                        error_log("PayPal Standard: Using mapped product #{$mapped_product_id} for item in PayPal");
+                        
+                        // Store mapping for future reference
+                        $mapping_key = 'wppps_product_mapping_' . $item['product_id'] . '_' . $site->id;
+                        set_transient($mapping_key, $mapped_product_id, 24 * HOUR_IN_SECONDS);
+                    }
+                }
+            }
+        }
+    }
+    
     
     // Decode addresses if provided
 $billing_address = null;
@@ -2692,6 +2717,27 @@ private function create_tracking_order($client_order_id, $client_site, $site_id)
     $items_json = isset($_GET['items']) ? $_GET['items'] : '';
     $items = !empty($items_json) ? json_decode(base64_decode($items_json), true) : array();
     
+    // Process items for mapped products
+if (!empty($items) && is_array($items)) {
+    foreach ($items as $key => $item_data) {
+        // Check if this item has a mapped product ID
+        if (!empty($item_data['mapped_product_id'])) {
+            $mapped_product_id = intval($item_data['mapped_product_id']);
+            $mapped_product = wc_get_product($mapped_product_id);
+            
+            if ($mapped_product) {
+                // Override name with mapped product name
+                $items[$key]['name'] = $mapped_product->get_name();
+                error_log("Standard Mapping: Using mapped product #{$mapped_product_id} for item {$item_data['name']}");
+                
+                // Store mapping for later use
+                $mapping_key = 'wppps_product_mapping_' . $item_data['product_id'] . '_' . $site_id;
+                set_transient($mapping_key, $mapped_product_id, 24 * HOUR_IN_SECONDS);
+            }
+        }
+    }
+}
+    
     $billing_address_encoded = isset($_GET['billing_address']) ? $_GET['billing_address'] : '';
     $shipping_address_encoded = isset($_GET['shipping_address']) ? $_GET['shipping_address'] : '';
     
@@ -2735,26 +2781,40 @@ private function create_tracking_order($client_order_id, $client_site, $site_id)
         
         foreach ($items as $item_data) {
             // Find or create product
-            $product_id = 0;
-            
-            $existing_products = wc_get_products(array(
-                'name' => $item_data['name'],
-                'limit' => 1
-            ));
-            
-            if (!empty($existing_products)) {
-                $product = $existing_products[0];
-                $product_id = $product->get_id();
-                error_log("Found existing product #$product_id for item: {$item_data['name']}");
-            } else {
-                $product = new WC_Product_Simple();
-                $product->set_name($item_data['name']);
-                $product->set_regular_price(isset($item_data['price']) ? $item_data['price'] : 0);
-                $product->set_status('publish');
-                $product->save();
-                $product_id = $product->get_id();
-                error_log("Created new product #$product_id for item: {$item_data['name']}");
-            }
+$product_id = 0;
+$product = null;
+
+// First check for mapped product ID
+$mapped_product_id = isset($item_data['mapped_product_id']) ? intval($item_data['mapped_product_id']) : 0;
+if ($mapped_product_id) {
+    $product = wc_get_product($mapped_product_id);
+    if ($product) {
+        $product_id = $mapped_product_id;
+        error_log("Found mapped product #{$product_id} for item: {$item_data['name']}");
+    }
+}
+
+// If no mapped product or it wasn't found, try to find existing product by name
+if (!$product) {
+    $existing_products = wc_get_products(array(
+        'name' => $item_data['name'],
+        'limit' => 1
+    ));
+    
+    if (!empty($existing_products)) {
+        $product = $existing_products[0];
+        $product_id = $product->get_id();
+        error_log("Found existing product #{$product_id} for item: {$item_data['name']}");
+    } else {
+        $product = new WC_Product_Simple();
+        $product->set_name($item_data['name']);
+        $product->set_regular_price(isset($item_data['price']) ? $item_data['price'] : 0);
+        $product->set_status('publish');
+        $product->save();
+        $product_id = $product->get_id();
+        error_log("Created new product #{$product_id} for item: {$item_data['name']}");
+    }
+}
             
             // Add to order
             if ($product) {
