@@ -1286,6 +1286,20 @@ function wppps_get_local_order_id_by_remote_id($remote_order_id) {
     return $post_id;
 }
 
+// Prevent WooCommerce from recalculating totals on our mirror orders
+add_filter('woocommerce_order_get_total', function($total, $order) {
+    if ($order->meta_exists('_wppps_manual_total') && $order->get_meta('_wppps_manual_total') === 'yes') {
+        // Return the manually set total
+        $manual_total = get_post_meta($order->get_id(), '_order_total', true);
+        if (!empty($manual_total)) {
+            return floatval($manual_total);
+        }
+    }
+    return $total;
+}, 99, 2);
+
+
+
 /**
  * Plugin deactivation hook
  */

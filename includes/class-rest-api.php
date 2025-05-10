@@ -2474,6 +2474,7 @@ public function handle_standard_ipn($request) {
     
     // Forward IPN to client site
     if ($payment_status === 'Completed') {
+        $this->update_mirror_order_status($order_id, $txn_id);
         // Generate secure notification
         $timestamp = time();
         $hash_data = $timestamp . $order_id . $txn_id . $site->api_key;
@@ -2541,6 +2542,7 @@ public function handle_standard_return($request) {
                 wp_die('Site not found');
             }
             
+             $this->update_mirror_order_on_return($order_id);
             // Generate secure return URL
             $timestamp = time();
             $hash_data = $timestamp . $order_id . $site->api_key;
@@ -2568,6 +2570,42 @@ public function handle_standard_return($request) {
     
     // If we get here, we couldn't find the session data
     wp_die('Could not determine your order. Please check your email for order confirmation or contact support.');
+}
+
+/**
+ * Update mirror order status when customer returns from PayPal
+ */
+private function update_mirror_order_on_return($client_order_id) {
+    $mirror_order_id = $this->find_mirror_order($client_order_id);
+    
+    if (!$mirror_order_id) {
+        error_log("PayPal Standard: No mirror order found for client order #$client_order_id on return");
+        
+        // DEBUG: List all recent orders to help diagnose
+        global $wpdb;
+        $recent_orders = $wpdb->get_results(
+            "SELECT ID, post_date FROM {$wpdb->posts} 
+             WHERE post_type = 'shop_order' 
+             ORDER BY post_date DESC LIMIT 5"
+        );
+        
+        error_log("Recent orders: " . print_r($recent_orders, true));
+        return;
+    }
+    
+    $mirror_order = wc_get_order($mirror_order_id);
+    if (!$mirror_order) {
+        error_log("PayPal Standard: Invalid mirror order #$mirror_order_id on return");
+        return;
+    }
+    
+   
+    if ( in_array( $mirror_order->get_status(), ['pending', 'on-hold'] ) ) {
+    $mirror_order->update_status( 'processing', __('Customer returned from PayPal. ', 'woo-paypal-proxy-server') );
+    $mirror_order->save();
+}
+    
+    error_log("PayPal Standard: Mirror order #$mirror_order_id updated to on-hold on customer return");
 }
 
 /**
@@ -2634,31 +2672,170 @@ public function handle_standard_cancel($request) {
     wp_die('Could not determine your order. Please check your email for order confirmation or contact support.');
 }
 
+
+ 
 /**
- * Create a tracking order
+ * Create a fully populated tracking order with client data
+ */
+/**
+ * Create a fully populated tracking order with client data
  */
 private function create_tracking_order($client_order_id, $client_site, $site_id) {
-    // Create order if needed to track this transaction
+    global $wpdb;
+    
+    // Debug logging
+    error_log("Creating mirror order with data:");
+    error_log("Client Order ID: " . $client_order_id);
+    error_log("Client Site: " . $client_site);
+    
+    // Get items and values
+    $items_json = isset($_GET['items']) ? $_GET['items'] : '';
+    $items = !empty($items_json) ? json_decode(base64_decode($items_json), true) : array();
+    
+    $billing_address_encoded = isset($_GET['billing_address']) ? $_GET['billing_address'] : '';
+    $shipping_address_encoded = isset($_GET['shipping_address']) ? $_GET['shipping_address'] : '';
+    
+    $billing_address = !empty($billing_address_encoded) ? json_decode(base64_decode($billing_address_encoded), true) : array();
+    $shipping_address = !empty($shipping_address_encoded) ? json_decode(base64_decode($shipping_address_encoded), true) : array();
+    
+    $subtotal = 0;
+    $shipping_amount = isset($_GET['shipping']) ? floatval($_GET['shipping']) : 0;
+    $tax_amount = isset($_GET['tax']) ? floatval($_GET['tax']) : 0;
+    $total_amount = isset($_GET['amount']) ? floatval($_GET['amount']) : 0;
+    
+    error_log("Items data: " . ($items_json ? 'Present' : 'Missing'));
+    error_log("Billing address: " . ($billing_address_encoded ? 'Present' : 'Missing'));
+    error_log("Shipping address: " . ($shipping_address_encoded ? 'Present' : 'Missing'));
+    error_log("Shipping amount: $shipping_amount");
+    error_log("Tax amount: $tax_amount");
+    error_log("Total amount: $total_amount");
+    
+    // Create order
     $order = wc_create_order(array(
         'status' => 'pending',
     ));
     
-    // Add meta data
+    $order_id = $order->get_id();
+    error_log("Created server order #$order_id");
+    
+    // Set addresses
+    if (!empty($billing_address)) {
+        $order->set_address($billing_address, 'billing');
+    }
+    
+    if (!empty($shipping_address)) {
+        $order->set_address($shipping_address, 'shipping');
+    } else if (!empty($billing_address)) {
+        $order->set_address($billing_address, 'shipping');
+    }
+    
+    // Add line items
+    if (!empty($items) && is_array($items)) {
+        error_log("Adding " . count($items) . " line items");
+        
+        foreach ($items as $item_data) {
+            // Find or create product
+            $product_id = 0;
+            
+            $existing_products = wc_get_products(array(
+                'name' => $item_data['name'],
+                'limit' => 1
+            ));
+            
+            if (!empty($existing_products)) {
+                $product = $existing_products[0];
+                $product_id = $product->get_id();
+                error_log("Found existing product #$product_id for item: {$item_data['name']}");
+            } else {
+                $product = new WC_Product_Simple();
+                $product->set_name($item_data['name']);
+                $product->set_regular_price(isset($item_data['price']) ? $item_data['price'] : 0);
+                $product->set_status('publish');
+                $product->save();
+                $product_id = $product->get_id();
+                error_log("Created new product #$product_id for item: {$item_data['name']}");
+            }
+            
+            // Add to order
+            if ($product) {
+                $quantity = isset($item_data['quantity']) ? intval($item_data['quantity']) : 1;
+                $price = isset($item_data['price']) ? floatval($item_data['price']) : 0;
+                $item_total = $price * $quantity;
+                $subtotal += $item_total;
+                
+                $item = new WC_Order_Item_Product();
+                $item->set_props(array(
+                    'product'    => $product,
+                    'quantity'   => $quantity,
+                    'subtotal'   => $item_total,
+                    'total'      => $item_total,
+                ));
+                
+                $order->add_item($item);
+                error_log("Added item to order: {$item_data['name']} x $quantity @ $price = $item_total");
+            }
+        }
+    }
+    
+    // Add shipping
+    if ($shipping_amount > 0) {
+        $shipping_item = new WC_Order_Item_Shipping();
+        $shipping_item->set_method_title('Shipping');
+        $shipping_item->set_total($shipping_amount);
+        $order->add_item($shipping_item);
+        
+        error_log("Added shipping: $shipping_amount");
+    }
+    
+$order->calculate_totals(); // Recalculate totals
+$order->save();
+    
+    // Add tax
+    if ($tax_amount > 0) {
+        $tax_item = new WC_Order_Item_Tax();
+        $tax_item->set_rate_id(1);
+        $tax_item->set_label('Tax');
+        $tax_item->set_tax_total($tax_amount);
+        $order->add_item($tax_item);
+        error_log("Added tax: $tax_amount");
+    }
+    $order->calculate_totals(); // Recalculate totals
+$order->save();
+    
+    // Calculate final total - this is the CRITICAL FIX
+    $calculated_total = $subtotal + $shipping_amount + $tax_amount;
+    error_log("Calculated total: $calculated_total (Subtotal: $subtotal + Shipping: $shipping_amount + Tax: $tax_amount)");
+    
+    // Use provided total if available, otherwise use calculated
+    $final_total = ($total_amount > 0) ? $total_amount : $calculated_total;
+     $order->set_total( $final_total );
+    
+    // IMPORTANT: Directly set meta values to avoid WooCommerce recalculations
+    update_post_meta($order_id, '_order_total', $final_total);
+    update_post_meta($order_id, '_order_tax', $tax_amount);
+    update_post_meta($order_id, '_wppps_manual_total', 'yes');
+    
+    // Set meta data for tracking
     $order->update_meta_data('_wppps_client_order_id', $client_order_id);
     $order->update_meta_data('_wppps_client_site', $client_site);
     $order->update_meta_data('_wppps_site_id', $site_id);
     $order->update_meta_data('_wppps_proxy_type', 'standard');
+    $order->update_meta_data('_wppps_session_id', isset($_GET['session_id']) ? $_GET['session_id'] : '');
     
     // Set order note
     $order->add_order_note(
-        sprintf(__('Tracking order for client site %s, order #%s', 'woo-paypal-proxy-server'), 
+        sprintf(__('Mirror order for client site %s, order #%s', 'woo-paypal-proxy-server'), 
         $client_site, $client_order_id)
     );
     
-    // Save order
     $order->save();
     
-    return $order->get_id();
+    // Store in transient
+    set_transient('wppps_mirror_order_' . $client_order_id, $order_id, 24 * HOUR_IN_SECONDS);
+    
+    error_log("Completed mirror order creation: SERVER #$order_id for CLIENT #$client_order_id with total: $final_total");
+    
+    return $order_id;
 }
 
 /**
@@ -2704,6 +2881,92 @@ private function log_ipn_transaction($site_id, $order_id, $txn_id, $status, $ipn
         );
     }
 }
+
+
+  /**
+ * Find mirror order by client order ID - FIXED VERSION
+ */
+private function find_mirror_order($client_order_id) {
+    // Step 1: Try transient first (fastest)
+    $mirror_order_id = get_transient('wppps_mirror_order_' . $client_order_id);
+    if ($mirror_order_id) {
+        error_log("Mirror order found via transient: #$mirror_order_id for client #$client_order_id");
+        return $mirror_order_id;
+    }
     
+    // Step 2: Try direct meta lookup
+    global $wpdb;
+    
+    // Try the direct database entry first
+    $mirror_order_id = $wpdb->get_var($wpdb->prepare(
+        "SELECT post_id FROM {$wpdb->postmeta} 
+         WHERE meta_key = %s AND meta_value = %s",
+        '_wppps_client_order_id_direct',
+        $client_order_id
+    ));
+    
+    if ($mirror_order_id) {
+        error_log("Mirror order found via direct meta: #$mirror_order_id for client #$client_order_id");
+        return $mirror_order_id;
+    }
+    
+    // Step 3: Try regular meta lookup
+    $mirror_order_id = $wpdb->get_var($wpdb->prepare(
+        "SELECT post_id FROM {$wpdb->postmeta} 
+         WHERE meta_key = %s AND meta_value = %s",
+        '_wppps_client_order_id',
+        $client_order_id
+    ));
+    
+    if ($mirror_order_id) {
+        error_log("Mirror order found via WC meta: #$mirror_order_id for client #$client_order_id");
+        return $mirror_order_id;
+    }
+    
+    // Step 4: Last resort - try searching order notes
+    $mirror_order_id = $wpdb->get_var($wpdb->prepare(
+        "SELECT post_id FROM {$wpdb->comments} 
+         WHERE comment_type = 'order_note' 
+         AND comment_content LIKE %s",
+        '%order #' . $client_order_id . '%'
+    ));
+    
+    if ($mirror_order_id) {
+        error_log("Mirror order found via order note: #$mirror_order_id for client #$client_order_id");
+        return $mirror_order_id;
+    }
+    
+    error_log("No mirror order found for client order #$client_order_id");
+    return false;
+}
+  
+  /**
+ * Update the mirror order status when payment is completed
+ */
+private function update_mirror_order_status($client_order_id, $transaction_id) {
+    $mirror_order_id = $this->find_mirror_order($client_order_id);
+    
+    if (!$mirror_order_id) {
+        error_log("PayPal Standard: No mirror order found for client order #$client_order_id");
+        return;
+    }
+    
+    $mirror_order = wc_get_order($mirror_order_id);
+    if (!$mirror_order) {
+        error_log("PayPal Standard: Invalid mirror order #$mirror_order_id");
+        return;
+    }
+    
+    // Update mirror order status and add transaction ID
+    $mirror_order->update_status('processing', __('Payment completed via PayPal', 'woo-paypal-proxy-server'));
+    $mirror_order->set_transaction_id($transaction_id);
+    $mirror_order->add_order_note(
+        sprintf(__('Payment completed via PayPal. Transaction ID: %s', 'woo-paypal-proxy-server'), 
+        $transaction_id)
+    );
+    $mirror_order->save();
+    
+    error_log("PayPal Standard: Mirror order #$mirror_order_id updated to processing, Transaction ID: $transaction_id");
+} 
 
 }
