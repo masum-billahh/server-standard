@@ -60,35 +60,55 @@ $paypal_email = isset($paypal_email) ? $paypal_email : get_option('wppps_paypal_
         
         <div class="spinner"></div>
         
-        <form id="paypal_form" name="paypal_form" action="https://www.sandbox.paypal.com/cgi-bin/webscr" method="post">
-            <input type="hidden" name="business" value="<?php echo esc_attr($paypal_email); ?>">
-            <input type="hidden" name="invoice" value="<?php echo esc_attr($order_id); ?>">
-            <input type="hidden" name="cmd" value="_cart">
-            <input type="hidden" name="upload" value="1">
-            
-            <?php foreach ($paypal_args as $key => $value) : ?>
-                <input type="hidden" name="<?php echo esc_attr($key); ?>" value="<?php echo esc_attr($value); ?>">
-            <?php endforeach; ?>
-            
-            <input type="hidden" name="custom" value="<?php echo esc_attr(json_encode(array(
-                'client_site' => $client_site,
-                'order_id' => $order_id,
-                'order_key' => $order_key,
-                'token' => $security_token,
-                'session_id' => isset($_GET['session_id']) ? $_GET['session_id'] : ''
-            ))); ?>">
-                        
-            
-           <!-- Return URLs back to this server -->
-           <input type="hidden" name="return" value="<?php echo esc_url(add_query_arg('session_id', isset($_GET['session_id']) ? $_GET['session_id'] : '', rest_url('wppps/v1/standard-return'))); ?>">
-            <input type="hidden" name="cancel_return" value="<?php echo esc_url(add_query_arg('session_id', isset($_GET['session_id']) ? $_GET['session_id'] : '', rest_url('wppps/v1/standard-cancel'))); ?>">
-            <input type="hidden" name="notify_url" value="<?php echo esc_url(rest_url('wppps/v1/standard-ipn')); ?>">
-                        
-            
-            <noscript>
-                <input type="submit" value="Click here if you are not redirected automatically" />
-            </noscript>
-        </form>
+<form id="paypal_form" name="paypal_form" action="https://www.sandbox.paypal.com/cgi-bin/webscr" method="post">
+    <input type="hidden" name="business" value="<?php echo esc_attr($paypal_email); ?>">
+    <input type="hidden" name="invoice" value="<?php echo esc_attr($order_id); ?>">
+    <input type="hidden" name="cmd" value="_cart">
+    <input type="hidden" name="upload" value="1">
+    <input type="hidden" name="address_override" value="1">
+    <input type="hidden" name="no_shipping" value="1">
+    
+    
+    
+    <?php 
+    // Add all PayPal args as hidden fields
+    foreach ($paypal_args as $key => $value) : 
+    ?>
+        <input type="hidden" name="<?php echo esc_attr($key); ?>" value="<?php echo esc_attr($value); ?>">
+    <?php endforeach; ?>
+    
+    <input type="hidden" name="custom" value="<?php echo esc_attr(json_encode(array(
+        'client_site' => $client_site,
+        'order_id' => $order_id,
+        'order_key' => $order_key,
+        'token' => $security_token,
+        'session_id' => isset($_GET['session_id']) ? $_GET['session_id'] : ''
+    ))); ?>">
+     <?php 
+    // Only add shipping address directly if it's not already in paypal_args
+    if (isset($shipping_address) && is_array($shipping_address) && 
+        !isset($paypal_args['first_name'])) : 
+    ?>
+        <input type="hidden" name="first_name" value="<?php echo esc_attr($shipping_address['first_name']); ?>">
+        <input type="hidden" name="last_name" value="<?php echo esc_attr($shipping_address['last_name']); ?>">
+        <input type="hidden" name="address1" value="<?php echo esc_attr($shipping_address['address_1']); ?>">
+        <input type="hidden" name="address2" value="<?php echo esc_attr($shipping_address['address_2']); ?>">
+        <input type="hidden" name="city" value="<?php echo esc_attr($shipping_address['city']); ?>">
+        <input type="hidden" name="state" value="<?php echo esc_attr($shipping_address['state']); ?>">
+        <input type="hidden" name="zip" value="<?php echo esc_attr($shipping_address['postcode']); ?>">
+        <input type="hidden" name="country" value="<?php echo esc_attr($shipping_address['country']); ?>">
+    <?php endif; ?>
+   
+    
+    <!-- Return URLs back to this server -->
+    <input type="hidden" name="return" value="<?php echo esc_url(add_query_arg('session_id', isset($_GET['session_id']) ? $_GET['session_id'] : '', rest_url('wppps/v1/standard-return'))); ?>">
+    <input type="hidden" name="cancel_return" value="<?php echo esc_url(add_query_arg('session_id', isset($_GET['session_id']) ? $_GET['session_id'] : '', rest_url('wppps/v1/standard-cancel'))); ?>">
+    <input type="hidden" name="notify_url" value="<?php echo esc_url(rest_url('wppps/v1/standard-ipn')); ?>">
+    
+    <noscript>
+        <input type="submit" value="Click here if you are not redirected automatically" />
+    </noscript>
+</form>
     </div>
     
     <script>

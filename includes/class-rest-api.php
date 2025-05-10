@@ -2270,12 +2270,18 @@ public function get_standard_bridge($request) {
     $security_token = $request->get_param('token');
     $api_key = $request->get_param('api_key');
     $session_id = $request->get_param('session_id');
-    
+    // Get addresses from the request
+$billing_address_encoded = $request->get_param('billing_address');
+$shipping_address_encoded = $request->get_param('shipping_address');
+$address_override = $request->get_param('address_override') ? '1' : '0';
+
     // Validate API key
     $site = $this->get_site_by_api_key($api_key);
     if (!$site) {
         return new WP_Error('invalid_api_key', 'Invalid API key', array('status' => 401));
     }
+    
+    
     
     // CRITICAL FIX: Store the session ID -> order ID mapping on THIS SERVER
     if (!empty($session_id) && !empty($order_id)) {
@@ -2297,10 +2303,40 @@ public function get_standard_bridge($request) {
     $items_json = $request->get_param('items');
     $items = json_decode(base64_decode($items_json), true);
     
-    // Build PayPal arguments
-    $paypal_args = array();
-    $paypal_args['currency_code'] = $request->get_param('currency') ?: 'USD';
-    $paypal_args['invoice'] = $order_id;
+    
+    // Decode addresses if provided
+$billing_address = null;
+$shipping_address = null;
+
+if (!empty($billing_address_encoded)) {
+    $billing_address = json_decode(base64_decode($billing_address_encoded), true);
+}
+
+if (!empty($shipping_address_encoded)) {
+    $shipping_address = json_decode(base64_decode($shipping_address_encoded), true);
+}
+
+// Build PayPal arguments
+$paypal_args = array();
+//$paypal_args['cmd'] = '_cart';
+//$paypal_args['upload'] = '1';
+$paypal_args['currency_code'] = $request->get_param('currency') ?: 'USD';
+$paypal_args['invoice'] = $order_id;
+$paypal_args['address_override'] = $address_override;
+$paypal_args['no_shipping'] = $address_override; // Prevent address change if address_override is set
+
+    // Add shipping address if provided
+if ($shipping_address) {
+    $paypal_args['first_name'] = $shipping_address['first_name'];
+    $paypal_args['last_name'] = $shipping_address['last_name'];
+    $paypal_args['address1'] = $shipping_address['address_1'];
+    $paypal_args['address2'] = $shipping_address['address_2'];
+    $paypal_args['city'] = $shipping_address['city'];
+    $paypal_args['state'] = $shipping_address['state'];
+    $paypal_args['zip'] = $shipping_address['postcode'];
+    $paypal_args['country'] = $shipping_address['country'];
+}
+    
     
     // Add line items if available
     if (!empty($items) && is_array($items)) {
@@ -2330,7 +2366,10 @@ public function get_standard_bridge($request) {
     
     // Get PayPal email
     $paypal_email = get_option('wppps_paypal_standard_email', '');
-    
+    // Check if PayPal email is set
+    if (empty($paypal_email)) {
+        error_log('PayPal Standard Error: No PayPal email configured');
+    }
     // Render bridge template
     header('Content-Type: text/html; charset=UTF-8');
     include WPPPS_PLUGIN_DIR . 'templates/paypal-bridge.php';
