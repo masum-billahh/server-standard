@@ -11,7 +11,8 @@ if (!defined('ABSPATH')) {
 
 $order_id = isset($order_id) ? $order_id : '';
 $order_key = isset($order_key) ? $order_key : '';
-$client_site = isset($client_site) ? $client_site : '';
+//$client_site = isset($client_site) ? $client_site : '';
+$api_key = isset($api_key) ? $api_key : '';
 $client_return_url = isset($client_return_url) ? $client_return_url : '';
 $client_cancel_url = isset($client_cancel_url) ? $client_cancel_url : '';
 $security_token = isset($security_token) ? $security_token : '';
@@ -80,7 +81,7 @@ $paypal_email = isset($paypal_email) ? $paypal_email : get_option('wppps_paypal_
     <?php endforeach; ?>
     
     <input type="hidden" name="custom" value="<?php echo esc_attr(json_encode(array(
-        'client_site' => $client_site,
+        'api_key' => $api_key,
         'order_id' => $order_id,
         'order_key' => $order_key,
         'token' => $security_token,

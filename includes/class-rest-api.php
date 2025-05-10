@@ -2264,9 +2264,9 @@ public function get_standard_bridge($request) {
       // Get parameters
     $order_id = $request->get_param('order_id');
     $order_key = $request->get_param('order_key');
-    $client_site = $request->get_param('client_site');
-    $client_return_url = $request->get_param('return_url');
-    $client_cancel_url = $request->get_param('cancel_url');
+    //$client_site = $request->get_param('client_site');
+    //$client_return_url = $request->get_param('return_url');
+    //$client_cancel_url = $request->get_param('cancel_url');
     $security_token = $request->get_param('token');
     $api_key = $request->get_param('api_key');
     $session_id = $request->get_param('session_id');
@@ -2277,11 +2277,19 @@ $address_override = $request->get_param('address_override') ? '1' : '0';
 
     // Validate API key
     $site = $this->get_site_by_api_key($api_key);
+           if (is_null($site)) {
+    error_log('Standard Bridge site is NULL');
+} else {
+    error_log('Standard Bridge site: ' . print_r($site, true));
+}
+
+
+
     if (!$site) {
         return new WP_Error('invalid_api_key', 'Invalid API key', array('status' => 401));
     }
     
-    
+    $client_site = $site->site_url;
     
     // CRITICAL FIX: Store the session ID -> order ID mapping on THIS SERVER
     if (!empty($session_id) && !empty($order_id)) {
@@ -2290,7 +2298,8 @@ $address_override = $request->get_param('address_override') ? '1' : '0';
         set_transient($transient_key, [
             'order_id' => $order_id,
             'client_site' => $client_site,
-            'order_key' => $order_key
+            'order_key' => $order_key,
+            'api_key' => $api_key
         ], 3600);
         
         error_log('Standard Bridge: Stored mapping - session ' . $session_id . ' -> order ' . $order_id);
@@ -2462,7 +2471,7 @@ public function handle_standard_ipn($request) {
     // Parse IPN data
     parse_str($raw_post_data, $ipn_vars);
     
-  // Get transaction details
+    // Get transaction details
     $payment_status = isset($ipn_vars['payment_status']) ? $ipn_vars['payment_status'] : '';
     $txn_id = isset($ipn_vars['txn_id']) ? $ipn_vars['txn_id'] : '';
     $invoice = isset($ipn_vars['invoice']) ? $ipn_vars['invoice'] : '';
@@ -2471,8 +2480,8 @@ public function handle_standard_ipn($request) {
     $mc_gross = isset($ipn_vars['mc_gross']) ? $ipn_vars['mc_gross'] : '';
     $custom = isset($ipn_vars['custom']) ? json_decode($ipn_vars['custom'], true) : array();
     
-    // Extract client data from custom field
-    $client_site = isset($custom['client_site']) ? $custom['client_site'] : '';
+    // Extract API key from custom field
+    $api_key = isset($custom['api_key']) ? $custom['api_key'] : '';
     $order_id = isset($custom['order_id']) ? $custom['order_id'] : '';
     
     // IMPORTANT: Use invoice to guarantee we're using the correct order ID
@@ -2480,49 +2489,66 @@ public function handle_standard_ipn($request) {
         error_log('Using invoice number for order ID: ' . $invoice);
         $order_id = $invoice;
     }
+    
     // Extract seller protection status if available
-$seller_protection = 'UNKNOWN';
-if (isset($ipn_vars['protection_eligibility'])) {
-    // Convert PayPal's protection_eligibility to our format
-    switch ($ipn_vars['protection_eligibility']) {
-        case 'Eligible':
-        case 'ELIGIBLE':
-            $seller_protection = 'ELIGIBLE';
-            break;
-        case 'PartiallyEligible':
-        case 'PARTIALLY_ELIGIBLE':
-            $seller_protection = 'PARTIALLY_ELIGIBLE';
-            break;
-        case 'Ineligible':
-        case 'NOT_ELIGIBLE':
-            $seller_protection = 'NOT_ELIGIBLE';
-            break;
-        default:
-            $seller_protection = 'UNKNOWN';
+    $seller_protection = 'UNKNOWN';
+    if (isset($ipn_vars['protection_eligibility'])) {
+        // Convert PayPal's protection_eligibility to our format
+        switch ($ipn_vars['protection_eligibility']) {
+            case 'Eligible':
+            case 'ELIGIBLE':
+                $seller_protection = 'ELIGIBLE';
+                break;
+            case 'PartiallyEligible':
+            case 'PARTIALLY_ELIGIBLE':
+                $seller_protection = 'PARTIALLY_ELIGIBLE';
+                break;
+            case 'Ineligible':
+            case 'NOT_ELIGIBLE':
+                $seller_protection = 'NOT_ELIGIBLE';
+                break;
+            default:
+                $seller_protection = 'UNKNOWN';
+        }
+        error_log('PayPal Standard IPN: Found seller protection status: ' . $seller_protection);
     }
-    error_log('PayPal Standard IPN: Found seller protection status: ' . $seller_protection);
-}
 
-// Store the seller protection status for later retrieval
-$this->store_seller_protection($txn_id, $seller_protection);
+    // Store the seller protection status for later retrieval
+    $this->store_seller_protection($txn_id, $seller_protection);
     
     $order_key = isset($custom['order_key']) ? $custom['order_key'] : '';
     $security_token = isset($custom['token']) ? $custom['token'] : '';
     
-    // Find site by URL
-    global $wpdb;
-    $sites_table = $wpdb->prefix . 'wppps_sites';
-    $site = $wpdb->get_row($wpdb->prepare(
-        "SELECT * FROM $sites_table WHERE site_url = %s OR site_url = %s OR site_url = %s",
-        $client_site,
-        rtrim($client_site, '/'),
-        $client_site . '/'
-    ));
+    // Find site by API key
+    $site = null;
+    if (!empty($api_key)) {
+        // Use get_site_by_api_key method
+        $site = $this->get_site_by_api_key($api_key);
+        error_log('PayPal Standard IPN: Found site using API key: ' . $api_key);
+    }
+    
+    // Fallback to legacy method if API key lookup fails
+    if (!$site && isset($custom['client_site'])) {
+        $client_site = $custom['client_site'];
+        global $wpdb;
+        $sites_table = $wpdb->prefix . 'wppps_sites';
+        $site = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $sites_table WHERE site_url = %s OR site_url = %s OR site_url = %s",
+            $client_site,
+            rtrim($client_site, '/'),
+            $client_site . '/'
+        ));
+        error_log('PayPal Standard IPN: Falling back to site URL lookup: ' . $client_site);
+    }
     
     if (!$site) {
-        error_log('Site not found for IPN: ' . $client_site);
+        error_log('Site not found for IPN. API key: ' . $api_key);
         return false;
     }
+    
+    // Get client site URL (needed for notification)
+    $client_site = $site->site_url;
+    error_log('PayPal Standard IPN: Using client site URL: ' . $client_site);
     
     // Store IPN data with correct order ID
     $this->log_ipn_transaction($site->id, $order_id, $txn_id, $payment_status, $ipn_vars);
@@ -2579,26 +2605,37 @@ public function handle_standard_return($request) {
         
         if ($session_data && isset($session_data['order_id'])) {
             $order_id = $session_data['order_id'];
-            $client_site = $session_data['client_site'];
-            $order_key = $session_data['order_key'];
+            
+            // Get API key from session data
+            $api_key = isset($session_data['api_key']) ? $session_data['api_key'] : '';
             
             error_log('PayPal Return: Found order ' . $order_id . ' for session ' . $session_id);
             
-            // Find site by URL
-            global $wpdb;
-            $sites_table = $wpdb->prefix . 'wppps_sites';
-            $site = $wpdb->get_row($wpdb->prepare(
-                "SELECT * FROM $sites_table WHERE site_url = %s OR site_url = %s OR site_url = %s",
-                $client_site,
-                rtrim($client_site, '/'),
-                $client_site . '/'
-            ));
+            // Find site by API key
+            $site = $this->get_site_by_api_key($api_key);
             
-            if (!$site) {
-                wp_die('Site not found');
+            if (!$site && isset($session_data['client_site'])) {
+                // Fallback to old method
+                global $wpdb;
+                $sites_table = $wpdb->prefix . 'wppps_sites';
+                $client_site = $session_data['client_site'];
+                $site = $wpdb->get_row($wpdb->prepare(
+                    "SELECT * FROM $sites_table WHERE site_url = %s OR site_url = %s OR site_url = %s",
+                    $client_site,
+                    rtrim($client_site, '/'),
+                    $client_site . '/'
+                ));
+                error_log('PayPal Return: Found site by URL (fallback): ' . $client_site);
             }
             
-             $this->update_mirror_order_on_return($order_id);
+            if (!$site) {
+                wp_die('Site not found. API key: ' . $api_key);
+            }
+            
+            $client_site = $site->site_url;
+            $order_key = $session_data['order_key'] ?? '';
+            
+            $this->update_mirror_order_on_return($order_id);
             // Generate secure return URL
             $timestamp = time();
             $hash_data = $timestamp . $order_id . $site->api_key;
@@ -2680,24 +2717,35 @@ public function handle_standard_cancel($request) {
         
         if ($session_data && isset($session_data['order_id'])) {
             $order_id = $session_data['order_id'];
-            $client_site = $session_data['client_site'];
-            $order_key = $session_data['order_key'];
+            
+            // Get API key from session data
+            $api_key = isset($session_data['api_key']) ? $session_data['api_key'] : '';
             
             error_log('PayPal Cancel: Found order ' . $order_id . ' for session ' . $session_id);
             
-            // Find site by URL
-            global $wpdb;
-            $sites_table = $wpdb->prefix . 'wppps_sites';
-            $site = $wpdb->get_row($wpdb->prepare(
-                "SELECT * FROM $sites_table WHERE site_url = %s OR site_url = %s OR site_url = %s",
-                $client_site,
-                rtrim($client_site, '/'),
-                $client_site . '/'
-            ));
+            // Find site by API key
+            $site = $this->get_site_by_api_key($api_key);
+            
+            if (!$site && isset($session_data['client_site'])) {
+                // Fallback to old method
+                global $wpdb;
+                $sites_table = $wpdb->prefix . 'wppps_sites';
+                $client_site = $session_data['client_site'];
+                $site = $wpdb->get_row($wpdb->prepare(
+                    "SELECT * FROM $sites_table WHERE site_url = %s OR site_url = %s OR site_url = %s",
+                    $client_site,
+                    rtrim($client_site, '/'),
+                    $client_site . '/'
+                ));
+                error_log('PayPal Cancel: Found site by URL (fallback): ' . $client_site);
+            }
             
             if (!$site) {
-                wp_die('Site not found');
+                wp_die('Site not found. API key: ' . $api_key);
             }
+            
+            $client_site = $site->site_url;
+            $order_key = $session_data['order_key'] ?? '';
             
             // Generate secure return URL
             $timestamp = time();
