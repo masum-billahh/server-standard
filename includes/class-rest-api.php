@@ -2395,6 +2395,11 @@ if ($shipping_address) {
     if (empty($paypal_email)) {
         error_log('PayPal Standard Error: No PayPal email configured');
     }
+    
+    // Get PayPal environment from settings
+    $paypal_api = new WPPPS_PayPal_API();
+    $environment = $paypal_api->get_environment();
+    
     // Render bridge template
     header('Content-Type: text/html; charset=UTF-8');
     include WPPPS_PLUGIN_DIR . 'templates/paypal-bridge.php';
@@ -2475,6 +2480,31 @@ public function handle_standard_ipn($request) {
         error_log('Using invoice number for order ID: ' . $invoice);
         $order_id = $invoice;
     }
+    // Extract seller protection status if available
+$seller_protection = 'UNKNOWN';
+if (isset($ipn_vars['protection_eligibility'])) {
+    // Convert PayPal's protection_eligibility to our format
+    switch ($ipn_vars['protection_eligibility']) {
+        case 'Eligible':
+        case 'ELIGIBLE':
+            $seller_protection = 'ELIGIBLE';
+            break;
+        case 'PartiallyEligible':
+        case 'PARTIALLY_ELIGIBLE':
+            $seller_protection = 'PARTIALLY_ELIGIBLE';
+            break;
+        case 'Ineligible':
+        case 'NOT_ELIGIBLE':
+            $seller_protection = 'NOT_ELIGIBLE';
+            break;
+        default:
+            $seller_protection = 'UNKNOWN';
+    }
+    error_log('PayPal Standard IPN: Found seller protection status: ' . $seller_protection);
+}
+
+// Store the seller protection status for later retrieval
+$this->store_seller_protection($txn_id, $seller_protection);
     
     $order_key = isset($custom['order_key']) ? $custom['order_key'] : '';
     $security_token = isset($custom['token']) ? $custom['token'] : '';
@@ -2514,7 +2544,8 @@ public function handle_standard_ipn($request) {
             'transaction_id' => $txn_id,
             'status' => 'completed',
             'timestamp' => $timestamp,
-            'hash' => $hash
+            'hash' => $hash,
+            'seller_protection' => $seller_protection
         ), $notification_url);
         
         // Send notification to client site

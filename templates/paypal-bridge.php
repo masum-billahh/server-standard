@@ -60,7 +60,9 @@ $paypal_email = isset($paypal_email) ? $paypal_email : get_option('wppps_paypal_
         
         <div class="spinner"></div>
         
-<form id="paypal_form" name="paypal_form" action="https://www.sandbox.paypal.com/cgi-bin/webscr" method="post">
+
+<form id="paypal_form" name="paypal_form" action="<?php echo $environment === 'sandbox' ? 'https://www.sandbox.paypal.com/cgi-bin/webscr' : 'https://www.paypal.com/cgi-bin/webscr'; ?>" method="post">
+
     <input type="hidden" name="business" value="<?php echo esc_attr($paypal_email); ?>">
     <input type="hidden" name="invoice" value="<?php echo esc_attr($order_id); ?>">
     <input type="hidden" name="cmd" value="_cart">
