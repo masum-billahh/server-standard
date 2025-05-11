@@ -247,6 +247,17 @@ $formatted_amount = number_format((float)$amount, 2, '.', ',');
         },
         //fundingSource: paypal.FUNDING.PAYPAL,
         
+         onClick: function(data) {
+             clearMessages();
+                if (data.fundingSource === 'paypal' || data.fundingSource === 'paylater') {
+                    document.getElementById('paypal-buttons-container').style.display = 'none';
+                    console.log("Clicked funding source:", data.fundingSource);
+                    sendMessageToParent({
+                        action: 'expand_iframe'
+                    });
+                }
+            },
+        
         // Create order
         createOrder: function(data, actions) {
             console.log('PayPal button clicked, notifying parent window');
@@ -349,6 +360,10 @@ $formatted_amount = number_format((float)$amount, 2, '.', ',');
                             status: captureData.status
                         }
                     });
+                    document.getElementById('paypal-buttons-container').style.display = 'block';
+                    sendMessageToParent({
+                            action: 'resize_iframe_normal'
+                        });
                     
                     // Show success message
                     hideProcessing();
@@ -383,6 +398,10 @@ $formatted_amount = number_format((float)$amount, 2, '.', ',');
                 action: 'payment_cancelled',
                 payload: data
             });
+            document.getElementById('paypal-buttons-container').style.display = 'block';
+            sendMessageToParent({
+                            action: 'resize_iframe_normal'
+                        });
             
             showMessage('Payment cancelled. You can try again when you\'re ready.');
         },
@@ -398,176 +417,13 @@ $formatted_amount = number_format((float)$amount, 2, '.', ',');
                     message: err.message || 'An error occurred'
                 }
             });
-            
+            document.getElementById('paypal-buttons-container').style.display = 'block';
             //showError('PayPal error: ' + (err.message || 'An error occurred'));
         }
     }).render('#paypal-buttons-container');
     
     
-    /*
-    // Add Credit Card option
-    paypal.Buttons({
-        style: {
-            layout: 'horizontal',
-            color: 'black',
-            shape: 'rect',
-            label: 'pay',
-            tagline: false
-        },
-        fundingSource: paypal.FUNDING.CARD,
-        
-        // Create order
-        createOrder: function(data, actions) {
-            console.log('Credit card option selected, notifying parent window');
-            
-            // Notify parent window that button was clicked
-            sendMessageToParent({
-                action: 'button_clicked'
-            });
-            
-            // Resize iframe to accommodate the card form
-            setTimeout(function() {
-                resizeIframe(document.body.scrollHeight + 100);
-            }, 100);
-            
-            // Wait for order data from parent
-            return new Promise(function(resolve, reject) {
-                console.log('Waiting for order data from parent window...');
-                
-                // Create message handler
-                var messageHandler = function(event) {
-                    console.log('Received message from parent:', event.data);
-                    
-                    // Check if message is for us
-                    var data = event.data;
-                    if (!data || !data.action || data.source !== 'woocommerce-site') {
-                        console.log('Not a valid message for us, ignoring');
-                        return;
-                    }
-                    
-                    // Handle create_paypal_order action
-                    if (data.action === 'create_paypal_order') {
-                        console.log('Received order data from parent');
-                        
-                        // Remove event listener
-                        window.removeEventListener('message', messageHandler);
-                        
-                        // Store order data
-                        orderData.orderId = data.order_id;
-                        orderData.orderKey = data.order_key;
-                        
-                        console.log('Creating PayPal order with data:', orderData);
-                        
-                        // Create PayPal order
-                        createPayPalOrder(orderData)
-                            .then(function(paypalOrderId) {
-                                console.log('PayPal order created:', paypalOrderId);
-                                resolve(paypalOrderId);
-                            })
-                            .catch(function(error) {
-                                console.error('Error creating PayPal order:', error);
-                                showError('Error creating PayPal order: ' + error.message);
-                                reject(error);
-                            });
-                    } else if (data.action === 'order_creation_failed') {
-                        console.log('Parent reported order creation failed');
-                        
-                        // Remove event listener
-                        window.removeEventListener('message', messageHandler);
-                        
-                        // Show error
-                        var error = new Error(data.message || 'Failed to create order');
-                        showError('Order creation failed: ' + error.message);
-                        reject(error);
-                    }
-                };
-                
-                // Add message listener
-                window.addEventListener('message', messageHandler);
-                
-                // Set timeout for order creation (30 seconds)
-                setTimeout(function() {
-                    console.log('Timeout waiting for order data');
-                    window.removeEventListener('message', messageHandler);
-                    var error = new Error('Timeout waiting for order data');
-                    showError('Timeout waiting for order data. Please try again.');
-                    reject(error);
-                }, 30000);
-            });
-        },
-        
-        // On approval
-        onApprove: function(data, actions) {
-            // Show processing message
-            showProcessing();
-            
-            // Capture the payment
-            return capturePayPalPayment(data.orderID)
-                .then(function(captureData) {
-                    // Notify parent window
-                    sendMessageToParent({
-                        action: 'order_approved',
-                        payload: {
-                            orderID: data.orderID,
-                            transactionID: captureData.transaction_id,
-                            status: captureData.status
-                        }
-                    });
-                    
-                    // Show success message
-                    hideProcessing();
-                    showSuccess('Payment successful! Finalizing your order...');
-                })
-                .catch(function(error) {
-                    // Handle error
-                    console.error('Error capturing payment:', error);
-                    
-                    // Notify parent window of error
-                    sendMessageToParent({
-                        action: 'payment_error',
-                        error: {
-                            message: error.message || 'Payment failed'
-                        }
-                    });
-                    
-                    // Show error message
-                    hideProcessing();
-                    showError('Error capturing payment: ' + error.message);
-                    
-                    throw error;
-                });
-        },
-        
-        // On cancel
-        onCancel: function(data) {
-            console.log('Payment cancelled:', data);
-            
-            // Notify parent window
-            sendMessageToParent({
-                action: 'payment_cancelled',
-                payload: data
-            });
-            
-            showMessage('Payment cancelled. You can try again when you\'re ready.');
-        },
-        
-        // On error
-        onError: function(err) {
-            console.error('PayPal error:', err);
-            
-            // Notify parent window
-            sendMessageToParent({
-                action: 'payment_error',
-                error: {
-                    message: err.message || 'An error occurred'
-                }
-            });
-            
-            showError('PayPal error: ' + (err.message || 'An error occurred'));
-        }
-    }).render('#paypal-buttons-container');
-    
-    */
+
     
     // Listen for messages from parent window
     window.addEventListener('message', function(event) {
@@ -841,6 +697,28 @@ function adjustHeight() {
     } else {
         // Regular height for PayPal buttons
         resizeIframe(document.body.scrollHeight);
+    }
+}
+
+/**
+ * Clear all message containers
+ */
+function clearMessages() {
+    var messageContainer = document.getElementById('paypal-message');
+    var errorContainer = document.getElementById('paypal-error');
+    var successContainer = document.getElementById('paypal-success');
+    
+    if (messageContainer) {
+        messageContainer.style.display = 'none';
+        messageContainer.textContent = '';
+    }
+    if (errorContainer) {
+        errorContainer.style.display = 'none';
+        errorContainer.textContent = '';
+    }
+    if (successContainer) {
+        successContainer.style.display = 'none';
+        successContainer.textContent = '';
     }
 }
 

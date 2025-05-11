@@ -62,6 +62,15 @@
                 tagline: false
             },
             
+            onClick: function(data) {
+                if (data.fundingSource === 'paypal') {
+                    console.log("Clicked funding source:", data.fundingSource);
+                    sendMessageToParent({
+                        action: 'expand_iframe'
+                    });
+                }
+            },
+            
             // Create order
             createOrder: function(data, actions) {
                 // Notify parent window that button was clicked
@@ -182,6 +191,10 @@
                             }
                         });
                         
+                        sendMessageToParent({
+                            action: 'resize_iframe_normal'
+                        });
+                        
                         // Show success message
                         hideProcessing();
                         showSuccess('Payment successful! Finalizing your order...');
@@ -214,6 +227,10 @@
                 sendMessageToParent({
                     action: 'payment_cancelled',
                     payload: data
+                });
+                
+                sendMessageToParent({
+                    action: 'resize_iframe_normal'
                 });
                 
                 showMessage('Payment cancelled. You can try again when you\'re ready.');
@@ -309,12 +326,10 @@
         });
     }
     
+    
     /**
      * Capture PayPal payment via REST API
-     */
-    /**
- * Capture PayPal payment via REST API
- */
+    */
 function capturePayPalPayment(paypalOrderId) {
     return new Promise(function(resolve, reject) {
         // Calculate timestamp for security
@@ -440,6 +455,8 @@ function capturePayPalPayment(paypalOrderId) {
             processingContainer.style.display = 'none';
         }
     }
+    
+    
     
     /**
      * Initialize when DOM is ready
