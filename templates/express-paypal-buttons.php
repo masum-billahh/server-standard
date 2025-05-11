@@ -149,6 +149,10 @@ $context = isset($_GET['context']) ? sanitize_text_field($_GET['context']) : 'de
                 
                 createOrder: function() {
                     sendMessageToParent({ action: 'button_clicked' });
+                    document.getElementById('paypal-express-button-container').style.display = 'none';
+                    sendMessageToParent({
+                                action: 'expand_iframe'
+                            });
                     
                     return new Promise(function(resolve, reject) {
                         var messageHandler = function(event) {
@@ -181,6 +185,11 @@ $context = isset($_GET['context']) ? sanitize_text_field($_GET['context']) : 'de
                         }
                     });
                     
+                    document.getElementById('paypal-express-button-container').style.display = 'block';
+                    sendMessageToParent({
+                            action: 'resize_iframe_normal'
+                        });
+                    
                     showSuccess('Payment successful! Finalizing your order...');
                     
                     return actions.order.capture().then(function(captureData) {
@@ -193,6 +202,11 @@ $context = isset($_GET['context']) ? sanitize_text_field($_GET['context']) : 'de
                         action: 'payment_cancelled',
                         payload: data
                     });
+                    
+                     document.getElementById('paypal-express-button-container').style.display = 'block';
+                    sendMessageToParent({
+                            action: 'resize_iframe_normal'
+                        });
                 },
                 
                 onError: function(err) {
@@ -202,6 +216,11 @@ $context = isset($_GET['context']) ? sanitize_text_field($_GET['context']) : 'de
                             message: err.message || 'An error occurred'
                         }
                     });
+                    
+                    document.getElementById('paypal-express-button-container').style.display = 'block';
+                    sendMessageToParent({
+                            action: 'resize_iframe_normal'
+                        });
                 }
             }).render('#paypal-express-button-container');
             
