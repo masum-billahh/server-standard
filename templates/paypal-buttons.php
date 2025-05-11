@@ -418,6 +418,12 @@ $formatted_amount = number_format((float)$amount, 2, '.', ',');
                 }
             });
             document.getElementById('paypal-buttons-container').style.display = 'block';
+            
+            // Reset iframe to normal size
+            sendMessageToParent({
+                action: 'resize_iframe_normal'
+            });
+            showError('PayPal window was closed. Please try again.');
             //showError('PayPal error: ' + (err.message || 'An error occurred'));
         }
     }).render('#paypal-buttons-container');
