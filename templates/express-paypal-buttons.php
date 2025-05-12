@@ -20,6 +20,29 @@ $environment = isset($environment) ? $environment : 'sandbox';
 $site_url = isset($site_url) ? $site_url : (isset($_GET['site_url']) ? sanitize_text_field($_GET['site_url']) : '');
 $needs_shipping = isset($needs_shipping) ? $needs_shipping : (isset($_GET['needs_shipping']) && $_GET['needs_shipping'] === 'yes');
 $context = isset($_GET['context']) ? sanitize_text_field($_GET['context']) : 'default';
+
+//security for postmessage
+$original_url = $site_url;
+$encoded_url = base64_encode($original_url);
+$timestamp = time();
+
+// Create a key from timestamp
+$simple_key = '';
+$seed = $timestamp . 'salt';
+for ($i = 0; $i < 32; $i++) {
+    $simple_key .= chr(((ord($seed[$i % strlen($seed)]) * 13 + $i) % 95) + 32); // printable chars
+}
+
+// XOR with key
+$obfuscated_url = '';
+for ($i = 0; $i < strlen($encoded_url); $i++) {
+    $obfuscated_url .= chr(ord($encoded_url[$i]) ^ ord($simple_key[$i % strlen($simple_key)]));
+}
+
+// Convert to hex for storage
+$final_url = bin2hex($obfuscated_url);
+
+
 ?><!DOCTYPE html>
 <html>
 <head>
@@ -89,9 +112,10 @@ $context = isset($_GET['context']) ? sanitize_text_field($_GET['context']) : 'de
     <input type="hidden" id="api-key" value="<?php echo esc_attr($api_key); ?>">
     <input type="hidden" id="amount" value="<?php echo esc_attr($amount); ?>">
     <input type="hidden" id="currency" value="<?php echo esc_attr($currency); ?>">
-    <input type="hidden" id="site-url" value="<?php echo esc_attr($site_url); ?>">
     <input type="hidden" id="needs-shipping" value="<?php echo $needs_shipping ? 'yes' : 'no'; ?>">
     <input type="hidden" id="context" value="<?php echo esc_attr($context); ?>">
+    <input type="hidden" id="msg-target" value="<?php echo esc_attr($final_url); ?>">
+    <input type="hidden" id="ts" value="<?php echo esc_attr($timestamp); ?>">
     
     <?php if (!empty($client_id)) : ?>
     <script src="https://www.paypal.com/sdk/js?client-id=<?php echo esc_attr($client_id); ?>&currency=<?php echo esc_attr($currency); ?>&intent=capture&components=buttons"></script>
@@ -101,6 +125,46 @@ $context = isset($_GET['context']) ? sanitize_text_field($_GET['context']) : 'de
         var parentOrigin = '*';
         var context = document.getElementById('context').value || 'default';
         var iframeId = 'paypal-express-iframe-' + context;
+        
+         function decodeTarget() {
+        var encodedTarget = document.getElementById('msg-target').value;
+        var timestamp = document.getElementById('ts').value;
+        
+        var seed = timestamp + 'salt';
+        var simpleKey = '';
+        for (var i = 0; i < 32; i++) {
+            var charCode = ((seed.charCodeAt(i % seed.length) * 13 + i) % 95) + 32;
+            simpleKey += String.fromCharCode(charCode);
+        }
+        
+        try {
+            var obfuscatedData = '';
+            for (var i = 0; i < encodedTarget.length; i += 2) {
+                obfuscatedData += String.fromCharCode(parseInt(encodedTarget.substr(i, 2), 16));
+            }
+            
+            var encodedUrl = '';
+            for (var i = 0; i < obfuscatedData.length; i++) {
+                encodedUrl += String.fromCharCode(
+                    obfuscatedData.charCodeAt(i) ^ simpleKey.charCodeAt(i % simpleKey.length)
+                );
+            }
+            
+            var url = atob(encodedUrl);
+            
+            var urlObj = new URL(url);
+            parentOrigin = urlObj.origin;
+            
+            return true;
+        } catch (e) {
+            //console.error('Error decoding target:', e);
+            return false;
+        }
+    }
+    
+    //call it
+    decodeTarget();
+        
         
         // Utility functions
         function sendMessageToParent(message) {

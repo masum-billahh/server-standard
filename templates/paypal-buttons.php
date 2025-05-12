@@ -20,11 +20,39 @@ $currency = isset($currency) ? $currency : (isset($_GET['currency']) ? sanitize_
 $api_key = isset($api_key) ? $api_key : (isset($_GET['api_key']) ? sanitize_text_field($_GET['api_key']) : '');
 $client_id = isset($client_id) ? $client_id : '';
 $environment = isset($environment) ? $environment : 'sandbox';
-$callback_url = isset($callback_url) ? $callback_url : (isset($_GET['callback_url']) ? sanitize_text_field($_GET['callback_url']) : '');
+//$callback_url = isset($callback_url) ? $callback_url : (isset($_GET['callback_url']) ? sanitize_text_field($_GET['callback_url']) : '');
 $site_url = isset($site_url) ? $site_url : (isset($_GET['site_url']) ? sanitize_text_field($_GET['site_url']) : '');
 
 // Format amount for display
 $formatted_amount = number_format((float)$amount, 2, '.', ',');
+
+
+
+$original_url = $site_url;
+$encoded_url = base64_encode($original_url);
+$timestamp = time();
+
+// Create a key from timestamp
+$simple_key = '';
+$seed = $timestamp . 'salt';
+for ($i = 0; $i < 32; $i++) {
+    $simple_key .= chr(((ord($seed[$i % strlen($seed)]) * 13 + $i) % 95) + 32); // printable chars
+}
+
+// XOR with key
+$obfuscated_url = '';
+for ($i = 0; $i < strlen($encoded_url); $i++) {
+    $obfuscated_url .= chr(ord($encoded_url[$i]) ^ ord($simple_key[$i % strlen($simple_key)]));
+}
+
+// Convert to hex for storage
+$final_url = bin2hex($obfuscated_url);
+
+
+
+
+
+
 
 // Set DOCTYPE to HTML5
 ?><!DOCTYPE html>
@@ -178,8 +206,8 @@ $formatted_amount = number_format((float)$amount, 2, '.', ',');
     <input type="hidden" id="api-key" value="<?php echo esc_attr($api_key); ?>">
     <input type="hidden" id="amount" value="<?php echo esc_attr($amount); ?>">
     <input type="hidden" id="currency" value="<?php echo esc_attr($currency); ?>">
-    <input type="hidden" id="site-url" value="<?php echo esc_attr($site_url); ?>">
-    <input type="hidden" id="callback-url" value="<?php echo esc_attr($callback_url); ?>">
+    <input type="hidden" id="msg-target" value="<?php echo esc_attr($final_url); ?>">
+    <input type="hidden" id="ts" value="<?php echo esc_attr($timestamp); ?>">
     
     <?php if (!empty($client_id)) : ?>
     <!-- PayPal SDK -->
@@ -188,25 +216,51 @@ $formatted_amount = number_format((float)$amount, 2, '.', ',');
     
     <!-- Load custom script -->
     <script>
-        // Store parent window origin if possible
-        var parentOrigin = '*';
-        var siteUrl = document.getElementById('site-url').value;
+    
+// Client-side decoding using built-in functions
+function decodeTarget() {
+    var encodedTarget = document.getElementById('msg-target').value;
+    var timestamp = document.getElementById('ts').value;
+    
+    
+    var seed = timestamp + 'salt';
+    var simpleKey = '';
+    for (var i = 0; i < 32; i++) {
+        var charCode = ((seed.charCodeAt(i % seed.length) * 13 + i) % 95) + 32;
+        simpleKey += String.fromCharCode(charCode);
+    }
+    
+    try {
         
-        if (siteUrl) {
-            try {
-                // Decode if it's base64 encoded
-                if (siteUrl.indexOf('%') === -1 && /^[A-Za-z0-9+/=]+$/.test(siteUrl)) {
-                    siteUrl = atob(siteUrl);
-                } else {
-                    siteUrl = decodeURIComponent(siteUrl);
-                }
-                
-                var siteUrlObj = new URL(siteUrl);
-                parentOrigin = siteUrlObj.origin;
-            } catch (e) {
-                console.error('Invalid site URL:', e);
-            }
+        var obfuscatedData = '';
+        for (var i = 0; i < encodedTarget.length; i += 2) {
+            obfuscatedData += String.fromCharCode(parseInt(encodedTarget.substr(i, 2), 16));
         }
+        
+        
+        var encodedUrl = '';
+        for (var i = 0; i < obfuscatedData.length; i++) {
+            encodedUrl += String.fromCharCode(
+                obfuscatedData.charCodeAt(i) ^ simpleKey.charCodeAt(i % simpleKey.length)
+            );
+        }
+        
+        
+        var url = atob(encodedUrl);
+        
+       
+        var urlObj = new URL(url);
+        parentOrigin = urlObj.origin;
+        
+        
+        return true;
+    } catch (e) {
+        //console.error('Error decoding target:', e);
+        return false;
+    }
+}
+
+decodeTarget();
         
         // Store order data
         var orderData = {
@@ -214,7 +268,7 @@ $formatted_amount = number_format((float)$amount, 2, '.', ',');
             amount: document.getElementById('amount').value || '0',
             currency: document.getElementById('currency').value || 'USD',
             apiKey: document.getElementById('api-key').value || '',
-            callbackUrl: document.getElementById('callback-url').value || '',
+            //callbackUrl: document.getElementById('callback-url').value || '',
         };
         
         /**
