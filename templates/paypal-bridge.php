@@ -56,7 +56,8 @@ $paypal_email = isset($paypal_email) ? $paypal_email : get_option('wppps_paypal_
 </head>
 <body>
     <div class="container">
-        <h2>Redirecting to PayPal</h2>
+        
+        <img src="<?php echo WPPPS_PLUGIN_URL . 'assets/images/paypal.svg'; ?>" alt="PayPal logo" />
         <p>Please wait while we redirect you to PayPal to complete your payment...</p>
         
         <div class="spinner"></div>
