@@ -414,14 +414,16 @@ decodeTarget();
                             status: captureData.status
                         }
                     });
+                    
+                    /*
                     document.getElementById('paypal-buttons-container').style.display = 'block';
                     sendMessageToParent({
                             action: 'resize_iframe_normal'
                         });
-                    
+                    */
                     // Show success message
-                    hideProcessing();
-                    showSuccess('Payment successful! Finalizing your order...');
+                    
+                    //showSuccess('Payment successful! Finalizing your order...');
                 })
                 .catch(function(error) {
                     // Handle error
@@ -649,13 +651,7 @@ decodeTarget();
         /**
          * Show success message
          */
-        function showSuccess(message) {
-            var successContainer = document.getElementById('paypal-success');
-            if (successContainer) {
-                successContainer.textContent = message;
-                successContainer.style.display = 'block';
-            }
-        }
+        
         
         /**
          * Show general message
@@ -671,12 +667,51 @@ decodeTarget();
         /**
          * Show processing indicator
          */
-        function showProcessing() {
-            var processingContainer = document.getElementById('paypal-processing');
-            if (processingContainer) {
-                processingContainer.style.display = 'flex';
-            }
+       // Update showProcessing function 
+function showProcessing() {
+    var processingContainer = document.getElementById('paypal-processing');
+    if (processingContainer) {
+        // Ensure the processing overlay covers the entire viewport
+        processingContainer.style.position = 'fixed';
+        processingContainer.style.top = '0';
+        processingContainer.style.left = '0';
+        processingContainer.style.width = '100vw';
+        processingContainer.style.height = '100vh';
+        processingContainer.style.display = 'flex';
+        processingContainer.style.zIndex = '10000';
+        processingContainer.style.backgroundColor = 'rgba(128, 128, 128, 0.6)';
+        
+        // Center the spinner and message
+        var spinnerEl = processingContainer.querySelector('.spinner');
+        var textEl = processingContainer.querySelector('.processing-text');
+        
+        if (textEl) {
+            textEl.style.fontSize = '18px';
+            textEl.style.fontWeight = 'bold';
         }
+    }
+}
+
+// showSuccess function to display more prominently
+function showSuccess(message) {
+    hideProcessing(); // Hide the processing spinner first
+    
+    var successContainer = document.getElementById('paypal-success');
+    if (successContainer) {
+        successContainer.style.position = 'fixed';
+        successContainer.style.top = '50%';
+        successContainer.style.left = '50%';
+        successContainer.style.transform = 'translate(-50%, -50%)';
+        successContainer.style.padding = '20px';
+        successContainer.style.borderRadius = '5px';
+        successContainer.style.fontSize = '18px';
+        successContainer.style.fontWeight = 'bold';
+        successContainer.style.zIndex = '10001';
+        successContainer.textContent = message;
+        successContainer.style.display = 'block';
+        successContainer.style.backgroundColor = 'rgba(128, 128, 128, 0.6)';
+    }
+}
         
         /**
          * Hide processing indicator
