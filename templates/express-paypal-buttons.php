@@ -187,11 +187,71 @@ $final_url = bin2hex($obfuscated_url);
             resizeIframe();
         }
         
-        function showSuccess(message) {
-            document.getElementById('paypal-success').textContent = message;
-            document.getElementById('paypal-success').style.display = 'block';
-            resizeIframe();
+function showSuccess(message) {
+    document.getElementById('paypal-success').textContent = '';
+    
+    var successContainer = document.getElementById('paypal-success');
+    if (successContainer) {
+        // Create a full-page overlay for the background
+        var overlay = document.createElement('div');
+        overlay.id = 'paypal-express-overlay';
+        overlay.style.position = 'fixed';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
+        overlay.style.width = '100vw';
+        overlay.style.height = '100vh';
+        overlay.style.backgroundColor = 'rgba(128, 128, 128, 0.6)'; // Semi-transparent white
+        overlay.style.zIndex = '9999';
+        document.body.appendChild(overlay);
+        
+        // Style the success message box
+        successContainer.style.position = 'fixed';
+        successContainer.style.top = '50%';
+        successContainer.style.left = '50%';
+        successContainer.style.transform = 'translate(-50%, -50%)';
+        successContainer.style.padding = '25px';
+        successContainer.style.borderRadius = '5px';
+        successContainer.style.zIndex = '10001'; // Higher than the overlay
+        successContainer.style.backgroundColor = '#ffffff';
+        successContainer.style.border = '1px solid #d6d8db';
+        successContainer.style.boxShadow = '0 5px 15px rgba(0,0,0,0.1)';
+        successContainer.style.minWidth = '320px';
+        successContainer.style.textAlign = 'center';
+        successContainer.style.display = 'block';
+        
+        // Create spinner
+        var spinner = document.createElement('div');
+        spinner.className = 'express-spinner';
+        spinner.style.width = '40px';
+        spinner.style.height = '40px';
+        spinner.style.margin = '0 auto 15px auto';
+        spinner.style.border = '4px solid #f3f3f3';
+        spinner.style.borderTop = '4px solid #3498db';
+        spinner.style.borderRadius = '50%';
+        spinner.style.animation = 'express-spin 1s linear infinite';
+        
+        // Add spin animation if it doesn't exist
+        if (!document.getElementById('express-spin-style')) {
+            var style = document.createElement('style');
+            style.id = 'express-spin-style';
+            style.textContent = '@keyframes express-spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}';
+            document.head.appendChild(style);
         }
+        
+        // Create message element
+        var messageEl = document.createElement('div');
+        messageEl.style.fontSize = '18px';
+        messageEl.style.fontWeight = 'bold';
+        messageEl.style.color = '#333';
+        messageEl.textContent = message;
+        
+        // Clear the container and add new elements
+        successContainer.innerHTML = '';
+        successContainer.appendChild(spinner);
+        successContainer.appendChild(messageEl);
+    }
+}
+        
         
         // Initialize PayPal buttons
         function initPayPalButtons() {
@@ -249,10 +309,13 @@ $final_url = bin2hex($obfuscated_url);
                         }
                     });
                     
+                    /*
                     document.getElementById('paypal-express-button-container').style.display = 'block';
                     sendMessageToParent({
                             action: 'resize_iframe_normal'
                         });
+                    
+                    */    
                     
                     showSuccess('Payment successful! Finalizing your order...');
                     
