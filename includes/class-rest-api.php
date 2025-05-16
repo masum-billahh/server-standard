@@ -1977,11 +1977,16 @@ public function mirror_order($request) {
         
         // Create a new order
         $order = wc_create_order(array(
-            'status' => 'processing',
+            'status' => 'pending',
             'customer_id' => 0, // Guest order
             'customer_note' => 'Mirrored from Website A - Order #' . $order_data['order_id'],
             'total' => $order_data['order_total'],
         ));
+        
+        $order->update_meta_data('_mirrored_from_external_order', $order_data['order_id']);
+        $order->save();
+        
+        $order->update_status('processing');
         
         // Set addresses
         if (!empty($order_data['billing_address'])) {
@@ -2222,7 +2227,7 @@ public function mirror_order($request) {
     ));
 }
         // Store meta data
-        $order->update_meta_data('_mirrored_from_external_order', $order_data['order_id']);
+        //$order->update_meta_data('_mirrored_from_external_order', $order_data['order_id']);
         $order->update_meta_data('_mirrored_from_site_id', $site->id);
         $order->update_meta_data('_paypal_order_id', $order_data['paypal_order_id']);
         

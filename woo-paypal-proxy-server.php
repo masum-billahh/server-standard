@@ -1304,7 +1304,20 @@ add_filter('woocommerce_order_get_total', function($total, $order) {
     return $total;
 }, 99, 2);
 
+// disable order emails on our mirror orders
+add_filter('woocommerce_email_enabled_new_order', function($enabled, $order) {
+    if ($order && $order->get_meta('_mirrored_from_external_order')) {
+        return false;
+    }
+    return $enabled;
+}, 10, 2);
 
+add_filter('woocommerce_email_enabled_new_order_notification', function($enabled, $order) {
+    if ($order instanceof WC_Order && $order->get_meta('_mirrored_from_external_order')) {
+        return false;
+    }
+    return $enabled;
+}, 10, 2);
 
 /**
  * Plugin deactivation hook
