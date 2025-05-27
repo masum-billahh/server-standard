@@ -23,6 +23,7 @@ $paypal_email = isset($paypal_email) ? $paypal_email : get_option('wppps_paypal_
 <html>
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Redirecting to PayPal...</title>
     <style>
         body {
