@@ -367,6 +367,7 @@ private function get_test_data($site_id, $order_id) {
     $currency = $request->get_param('currency') ?: 'USD';
     $callback_url = $request->get_param('callback_url') ? base64_decode($request->get_param('callback_url')) : '';
     $site_url = $request->get_param('site_url') ? base64_decode($request->get_param('site_url')) : '';
+    $card = $request->get_param('card');
     
     // Set up template variables
     $client_id = $this->paypal_api->get_client_id();

@@ -23,6 +23,8 @@ $environment = isset($environment) ? $environment : 'sandbox';
 //$callback_url = isset($callback_url) ? $callback_url : (isset($_GET['callback_url']) ? sanitize_text_field($_GET['callback_url']) : '');
 $site_url = isset($site_url) ? $site_url : (isset($_GET['site_url']) ? sanitize_text_field($_GET['site_url']) : '');
 
+$card = isset($card) ? $card : (isset($_GET['card']) ? sanitize_text_field($_GET['card']) : '');
+
 // Format amount for display
 $formatted_amount = number_format((float)$amount, 2, '.', ',');
 
@@ -208,13 +210,24 @@ $final_url = bin2hex($obfuscated_url);
     <input type="hidden" id="currency" value="<?php echo esc_attr($currency); ?>">
     <input type="hidden" id="msg-target" value="<?php echo esc_attr($final_url); ?>">
     <input type="hidden" id="ts" value="<?php echo esc_attr($timestamp); ?>">
-    
-    <?php if (!empty($client_id)) : ?>
-    <!-- PayPal SDK -->
-<script src="https://www.paypal.com/sdk/js?client-id=<?php echo esc_attr($client_id); ?>&currency=<?php echo esc_attr($currency); ?>&intent=capture&components=buttons&disable-funding=sepa"></script>
-    <?php endif; ?>
-    
-    <!-- Load custom script -->
+  <input type="hidden" id="crd" value="<?php echo esc_attr($card); ?>">
+
+<?php
+if (!empty($client_id)) {
+    if ($card == 0) {
+        // Run alternate PayPal script
+        ?>
+        <script src="https://www.paypal.com/sdk/js?client-id=<?php echo esc_attr($client_id); ?>&currency=<?php echo esc_attr($currency); ?>&components=buttons&disable-funding=sepa,card"></script>
+        <?php
+    } else {
+        // Default PayPal script
+        ?>
+        <script src="https://www.paypal.com/sdk/js?client-id=<?php echo esc_attr($client_id); ?>&currency=<?php echo esc_attr($currency); ?>&intent=capture&components=buttons&disable-funding=sepa"></script>
+        <?php
+    }
+}
+?>
+
     <script>
     
 // Client-side decoding using built-in functions
