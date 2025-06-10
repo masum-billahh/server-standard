@@ -316,6 +316,7 @@ decodeTarget();
         
          onClick: function(data) {
              clearMessages();
+             selectedFundingSource = data.fundingSource;
                 if (data.fundingSource === 'paypal' || data.fundingSource === 'paylater') {
                     document.getElementById('paypal-buttons-container').style.display = 'none';
                     console.log("Clicked funding source:", data.fundingSource);
@@ -323,6 +324,7 @@ decodeTarget();
                         action: 'expand_iframe'
                     });
                 }
+                
             },
         
         // Create order
@@ -331,8 +333,18 @@ decodeTarget();
             
             // Notify parent window that button was clicked
             sendMessageToParent({
-                action: 'button_clicked'
+                action: 'button_clicked',
+                fundingSource: selectedFundingSource
             });
+            
+            /*
+            if (data.fundingSource === 'card') {
+                    console.log("Funding source is credit card");
+                    sendMessageToParent({
+                        action: 'source_card'
+                    });
+                }
+            */
             
             // Wait for order data from parent
             return new Promise(function(resolve, reject) {
