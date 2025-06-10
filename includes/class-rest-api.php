@@ -869,6 +869,14 @@ public function create_paypal_order($request) {
         // Store it for later retrieval
         $this->store_seller_protection($paypal_order_id, $seller_protection);
     }
+            $account_status = 'UNKNOWN';
+            if (!empty($capture['payment_source']['paypal']['account_status'])) {
+                $account_status = $capture['payment_source']['paypal']['account_status'];
+                error_log('Found account status: ' . $account_status);
+            
+                // Optionally store it
+                $this->store_account_status($paypal_order_id, $account_status);
+            }
         
         // Return capture details
         return new WP_REST_Response(array(
@@ -877,6 +885,15 @@ public function create_paypal_order($request) {
             'status' => $capture['status'],
         ), 200);
     }
+    
+    
+    private function store_account_status($paypal_order_id, $status) {
+        $transient_key = 'wppps_account_status_' . $paypal_order_id;
+        set_transient($transient_key, $status, 24 * HOUR_IN_SECONDS);
+        error_log('Stored account status for order ' . $paypal_order_id . ': ' . $status);
+        return true;
+    }
+
     
     /**
      * Process PayPal webhook events
@@ -1178,13 +1195,22 @@ private function validate_request($request) {
         $seller_protection = 'UNKNOWN'; // Default if not found
     }
     
+    $transient_key_2 = 'wppps_account_status_' . $paypal_order_id;
+    // Get the account status
+    $account_status = get_transient($transient_key_2);
+    if ($account_status === false) {
+        $account_status = 'UNKNOWN';
+    }
+    
     error_log('Retrieved seller protection status for ' . $paypal_order_id . ': ' . $seller_protection);
+     error_log('Retrieved account status for ' . $paypal_order_id . ': ' . $account_status);
     
     // Return the seller protection status
     return new WP_REST_Response(array(
         'success' => true,
         'order_id' => $paypal_order_id,
-        'seller_protection' => $seller_protection
+        'seller_protection' => $seller_protection,
+        'account_status' => $account_status
     ), 200);
 }
     
@@ -1677,6 +1703,7 @@ public function capture_express_payment($request) {
         
         $transaction_id = '';
         $seller_protection = 'UNKNOWN';
+        $account_status = 'UNKNOWN';
         $capture_data = null;
         
         // If we got order details successfully, check its status
@@ -1694,6 +1721,11 @@ public function capture_express_payment($request) {
                     
                     if (isset($capture['seller_protection']['status'])) {
                         $seller_protection = $capture['seller_protection']['status'];
+                    }
+                    
+                    if (isset($order_details['payment_source']['paypal']['account_status'])) {
+                        $account_status = $order_details['payment_source']['paypal']['account_status'];
+                        error_log('Express Checkout: Account status: ' . $account_status);
                     }
                     
                     $capture_data = $order_details;
@@ -1794,6 +1826,7 @@ public function capture_express_payment($request) {
             json_encode(array(
                 'transaction_id' => $transaction_id,
                 'seller_protection' => $seller_protection,
+                'account_status' => $account_status,
                 'capture_data' => $capture_data
             ))
         );
@@ -1802,7 +1835,8 @@ public function capture_express_payment($request) {
         return new WP_REST_Response(array(
             'success' => true,
             'transaction_id' => $transaction_id,
-            'seller_protection' => $seller_protection
+            'seller_protection' => $seller_protection,
+            'account_status' => $account_status
         ), 200);
         
     } catch (Exception $e) {
