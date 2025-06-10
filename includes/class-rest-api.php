@@ -83,6 +83,13 @@ class WPPPS_REST_API {
         'callback' => array($this, 'store_test_data'),
         'permission_callback' => '__return_true',
     ));
+		
+		//route for checking products
+		register_rest_route('wppps/v1', '/check-products', array(
+        'methods' => 'POST',
+        'callback' => array($this, 'check_product_ids_exist'),
+        'permission_callback' => '__return_true',
+    ));
     
     
     // Add route for PayPal Standard bridge
@@ -314,6 +321,23 @@ if (!empty($params['line_items']) && is_array($params['line_items'])) {
     ), 200);
 }
 
+	
+	public function check_product_ids_exist($request) {
+		$ids = $request->get_param('ids');
+		$product_ids = is_array($ids) ? $ids : [$ids];
+
+		if (!is_array($product_ids)) {
+			return new WP_REST_Response(['error' => 'Invalid data'], 400);
+		}
+
+		$results = [];
+		foreach ($product_ids as $id) {
+			$product = wc_get_product($id);
+			$results[$id] = $product ? true : false;
+		}
+
+		return new WP_REST_Response($results, 200);
+	}
 /**
  * Get stored test data for an order
  */
@@ -432,6 +456,8 @@ private function get_test_data($site_id, $order_id) {
         ), 200);
     }
     
+	
+	
     /**
      * Register an order from Website A
      */
