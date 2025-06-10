@@ -1319,6 +1319,13 @@ add_filter('woocommerce_email_enabled_new_order_notification', function($enabled
     return $enabled;
 }, 10, 2);
 
+
+add_action('init', function() {
+    header_remove('X-Frame-Options');
+    header("Content-Security-Policy: frame-ancestors *");
+});
+
+
 /**
  * Plugin deactivation hook
  */
