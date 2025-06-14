@@ -1019,6 +1019,9 @@ public function create_order($amount, $currency = 'USD', $reference_id = '', $re
             'brand_name' => get_bloginfo('name')
         );
         
+        $return_url = home_url('/checkout/order-received/');
+        $cancel_url = home_url('/cart/');
+        
         // Add return and cancel URLs if provided
         if (!empty($return_url)) {
             $payload['application_context']['return_url'] = $return_url;
