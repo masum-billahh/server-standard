@@ -363,10 +363,20 @@ private function get_test_data($site_id, $order_id) {
     $api_secret_hash = $request->get_param('hash');
     $get_timestamp_from_client = $request->get_param('timestamp');
     $site = null;
+    $site_url = $request->get_param('site_url') ? base64_decode($request->get_param('site_url')) : '';
+    
     
     
     if (!empty($api_key)) {
         $site = $this->get_site_by_api_key($api_key);
+        if (!$site || $site->site_url != $site_url) {
+            return new WP_Error(
+                'invalid_api secret',
+                __('Invalid api or secret key', 'woo-paypal-proxy-server'),
+                array('status' => 401)
+            );
+        }
+        
         $timestamp = $get_timestamp_from_client;
         $xpected_hash = hash_hmac('sha256', $timestamp, $site->api_secret); 
         
@@ -390,7 +400,6 @@ private function get_test_data($site_id, $order_id) {
     $amount = $request->get_param('amount');
     $currency = $request->get_param('currency') ?: 'USD';
     $callback_url = $request->get_param('callback_url') ? base64_decode($request->get_param('callback_url')) : '';
-    $site_url = $request->get_param('site_url') ? base64_decode($request->get_param('site_url')) : '';
     $card = $request->get_param('card');
     
     // Set up template variables
@@ -1232,11 +1241,20 @@ public function get_express_paypal_buttons($request) {
     $api_secret_hash = $request->get_param('hash');
     $timestamp = $request->get_param('timestamp');
     $site = null;
+    $site_url = $request->get_param('site_url') ? base64_decode($request->get_param('site_url')) : '';
     
     error_log('Express Checkout: Received button request with params: ' . json_encode($request->get_params()));
     
+    
     if (!empty($api_key)) {
         $site = $this->get_site_by_api_key($api_key);
+        if (!$site || $site->site_url != $site_url) {
+            return new WP_Error(
+                'invalid_api secret',
+                __('Invalid api or secret key', 'woo-paypal-proxy-server'),
+                array('status' => 401)
+            );
+        }
         
         if (!$site) {
             header('Content-Type: text/html; charset=UTF-8');
@@ -1257,7 +1275,7 @@ public function get_express_paypal_buttons($request) {
     $amount = $request->get_param('amount');
     $currency = $request->get_param('currency') ?: 'USD';
     $callback_url = $request->get_param('callback_url') ? base64_decode($request->get_param('callback_url')) : '';
-    $site_url = $request->get_param('site_url') ? base64_decode($request->get_param('site_url')) : '';
+    
     $needs_shipping = $request->get_param('needs_shipping') === 'yes';
     
     error_log('Express Checkout: Preparing buttons with amount=' . $amount . ', currency=' . $currency . ', needs_shipping=' . ($needs_shipping ? 'yes' : 'no'));
