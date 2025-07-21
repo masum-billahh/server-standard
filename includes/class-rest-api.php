@@ -1452,11 +1452,7 @@ public function create_express_checkout($request) {
             $custom_data['discount_total'] = floatval($order_data['discount_total']);
         }
         
-        // Add customer info if available
-        if (!empty($order_data['customer_info'])) {
-            $custom_data['billing_address'] = $order_data['customer_info'];
-        }
-        
+       
         // Set application context for Express Checkout
         $application_context = array(
             'shipping_preference' => $order_data['needs_shipping'] ? 'GET_FROM_FILE' : 'NO_SHIPPING',
