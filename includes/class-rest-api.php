@@ -64,6 +64,13 @@ class WPPPS_REST_API {
             'permission_callback' => '__return_true',
         ));
         
+        // Register route for checkout cancel
+        register_rest_route('wppps/v1', '/checkout-cancel', array(
+            'methods' => 'GET',
+            'callback' => array($this, 'handle_checkout_cancel'),
+            'permission_callback' => '__return_true',
+        ));
+        
         // Register route for capturing a PayPal payment
         register_rest_route('wppps/v1', '/capture-payment', array(
             'methods' => 'POST',
@@ -1340,6 +1347,54 @@ private function map_product_ids_for_express($line_items, $site_id) {
     }
 
 /**
+ * Handle PayPal checkout cancel
+ */
+public function handle_checkout_cancel($request) {
+    // Get PayPal parameters
+    $paypal_order_id = $request->get_param('token'); // PayPal sends order ID as 'token'
+    
+    // Find the original order from our transaction log
+    global $wpdb;
+    $log_table = $wpdb->prefix . 'wppps_transaction_log';
+    
+    $transaction = $wpdb->get_row($wpdb->prepare(
+        "SELECT * FROM $log_table WHERE paypal_order_id = %s ORDER BY created_at DESC LIMIT 1",
+        $paypal_order_id
+    ));
+    
+    if (!$transaction) {
+        error_log('PayPal Checkout Cancel: Transaction not found for PayPal order ' . $paypal_order_id);
+        
+        exit;
+    }
+    
+    // Get site information
+    $sites_table = $wpdb->prefix . 'wppps_sites';
+    $site = $wpdb->get_row($wpdb->prepare(
+        "SELECT * FROM $sites_table WHERE id = %d",
+        $transaction->site_id
+    ));
+    
+    if (!$site) {
+        
+        exit;
+    }
+
+    // Redirect directly to Website A's checkout page with cancel message
+    $checkout_url = trailingslashit($site->site_url) . 'checkout/';
+    $checkout_url = add_query_arg(array(
+        'paypal_cancelled' => '1',
+        'order_id' => $transaction->order_id
+    ), $checkout_url);
+    
+    
+    // Redirect back to Website A checkout page
+    wp_redirect($checkout_url);
+    exit;
+}
+
+
+/**
  * Create Express Checkout order in PayPal
  */
 // Update create_express_checkout method:
@@ -1423,7 +1478,7 @@ public function create_express_checkout($request) {
         // Prepare order data for PayPal
         $reference_id = 'WC_ORDER_' . $order_data['order_id'];
         $return_url = home_url('/checkout/order-received/');
-        $cancel_url = home_url('/cart/');
+        $cancel_url = home_url('/wp-json/wppps/v1/checkout-cancel');
         
         // Get the order amount
         $order_amount = isset($order_data['order_total']) ? floatval($order_data['order_total']) : 0;

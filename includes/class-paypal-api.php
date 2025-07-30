@@ -1020,7 +1020,7 @@ public function create_order($amount, $currency = 'USD', $reference_id = '', $re
         );
         
         $return_url = home_url('/checkout/order-received/');
-        $cancel_url = home_url('/cart/');
+        $cancel_url = home_url('/wp-json/wppps/v1/checkout-cancel');
         
         // Add return and cancel URLs if provided
         if (!empty($return_url)) {
