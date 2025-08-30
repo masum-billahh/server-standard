@@ -113,10 +113,10 @@ register_rest_route('wppps/v1', '/standard-return', array(
     'permission_callback' => '__return_true',
 ));
 
-register_rest_route('wppps/v1', '/standard-cancel', array(
+register_rest_route('wppps/v1', '/standard-cancel/(?P<session_id>[a-zA-Z0-9]+)', array(
     'methods' => 'GET',
     'callback' => array($this, 'handle_standard_cancel'),
-    'permission_callback' => '__return_true',
+    'permission_callback' => '__return_true'
 ));
 
 register_rest_route('wppps/v1', '/standard-ipn', array(
@@ -2864,8 +2864,9 @@ private function update_mirror_order_on_return($client_order_id) {
  */
 public function handle_standard_cancel($request) {
     // Get session ID from URL
-    $session_id = isset($_GET['session_id']) ? sanitize_text_field($_GET['session_id']) : '';
-    
+    //$session_id = isset($_GET['session_id']) ? sanitize_text_field($_GET['session_id']) : '';
+    $session_id = $request->get_param('session_id') ?: '';
+
     error_log('PayPal Cancel: Looking for session ' . $session_id);
     
     // Lookup the order ID from the session mapping on THIS SERVER
@@ -2929,6 +2930,8 @@ public function handle_standard_cancel($request) {
             error_log('PayPal Cancel: No session data found for ' . $session_id);
         }
     }
+    
+    
     
     // If we get here, we couldn't find the session data
     wp_die('Could not determine your order. Please check your email for order confirmation or contact support.');

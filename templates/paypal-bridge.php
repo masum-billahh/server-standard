@@ -107,7 +107,7 @@ $paypal_email = isset($paypal_email) ? $paypal_email : get_option('wppps_paypal_
     
     <!-- Return URLs back to this server -->
     <input type="hidden" name="return" value="<?php echo esc_url(add_query_arg('session_id', isset($_GET['session_id']) ? $_GET['session_id'] : '', rest_url('wppps/v1/standard-return'))); ?>">
-    <input type="hidden" name="cancel_return" value="<?php echo esc_url(add_query_arg('session_id', isset($_GET['session_id']) ? $_GET['session_id'] : '', rest_url('wppps/v1/standard-cancel'))); ?>">
+    <input type="hidden" name="cancel_return" value="<?php echo esc_url(rest_url('wppps/v1/standard-cancel/' . (isset($_GET['session_id']) ? sanitize_text_field($_GET['session_id']) : ''))); ?>">    
     <input type="hidden" name="notify_url" value="<?php echo esc_url(rest_url('wppps/v1/standard-ipn')); ?>">
     
     <noscript>
