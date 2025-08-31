@@ -2419,22 +2419,22 @@ public function get_standard_bridge($request) {
     $order_key = $request->get_param('order_key');
     //$client_site = $request->get_param('client_site');
     //$client_return_url = $request->get_param('return_url');
-    //$client_cancel_url = $request->get_param('cancel_url');
+    $checkout_page_url = $request->get_param('checkout_page_url');
     $security_token = $request->get_param('token');
     $api_key = $request->get_param('api_key');
     $session_id = $request->get_param('session_id');
     // Get addresses from the request
-$billing_address_encoded = $request->get_param('billing_address');
-$shipping_address_encoded = $request->get_param('shipping_address');
-$address_override = $request->get_param('address_override') ? '1' : '0';
+    $billing_address_encoded = $request->get_param('billing_address');
+    $shipping_address_encoded = $request->get_param('shipping_address');
+    $address_override = $request->get_param('address_override') ? '1' : '0';
 
     // Validate API key
     $site = $this->get_site_by_api_key($api_key);
            if (is_null($site)) {
     error_log('Standard Bridge site is NULL');
-} else {
-    error_log('Standard Bridge site: ' . print_r($site, true));
-}
+    } else {
+        error_log('Standard Bridge site: ' . print_r($site, true));
+    }
 
 
 
@@ -2444,7 +2444,11 @@ $address_override = $request->get_param('address_override') ? '1' : '0';
     
     $client_site = $site->site_url;
     
-    // CRITICAL FIX: Store the session ID -> order ID mapping on THIS SERVER
+    setcookie('paypal_client_site', $client_site, time() + 3600, '/', '');
+    setcookie('paypal_order_id', $order_id, time() + 3600, '/', '');
+    setcookie('ppl_checkout_url', $checkout_page_url, time() + 3600, '/', '');
+    
+    //Store the session ID -> order ID mapping on THIS SERVER
     if (!empty($session_id) && !empty($order_id)) {
         // Store in transient for 1 hour
         $transient_key = 'paypal_session_' . $session_id;
@@ -2986,13 +2990,7 @@ if (!empty($items) && is_array($items)) {
     $shipping_amount = isset($_GET['shipping']) ? floatval($_GET['shipping']) : 0;
     $tax_amount = isset($_GET['tax']) ? floatval($_GET['tax']) : 0;
     $total_amount = isset($_GET['amount']) ? floatval($_GET['amount']) : 0;
-    
-    error_log("Items data: " . ($items_json ? 'Present' : 'Missing'));
-    error_log("Billing address: " . ($billing_address_encoded ? 'Present' : 'Missing'));
-    error_log("Shipping address: " . ($shipping_address_encoded ? 'Present' : 'Missing'));
-    error_log("Shipping amount: $shipping_amount");
-    error_log("Tax amount: $tax_amount");
-    error_log("Total amount: $total_amount");
+ 
     
     // Create order
     $order = wc_create_order(array(

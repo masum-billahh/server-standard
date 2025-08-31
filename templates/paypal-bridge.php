@@ -107,8 +107,9 @@ $paypal_email = isset($paypal_email) ? $paypal_email : get_option('wppps_paypal_
     
     <!-- Return URLs back to this server -->
     <input type="hidden" name="return" value="<?php echo esc_url(add_query_arg('session_id', isset($_GET['session_id']) ? $_GET['session_id'] : '', rest_url('wppps/v1/standard-return'))); ?>">
-    <input type="hidden" name="cancel_return" value="<?php echo esc_url(rest_url('wppps/v1/standard-cancel/' . (isset($_GET['session_id']) ? sanitize_text_field($_GET['session_id']) : ''))); ?>">    
-    <input type="hidden" name="notify_url" value="<?php echo esc_url(rest_url('wppps/v1/standard-ipn')); ?>">
+     <!-- <input type="hidden" name="cancel_return" value="<?php echo esc_url(rest_url('wppps/v1/standard-cancel/' . (isset($_GET['session_id']) ? sanitize_text_field($_GET['session_id']) : ''))); ?>">    
+     -->
+     <input type="hidden" name="notify_url" value="<?php echo esc_url(rest_url('wppps/v1/standard-ipn')); ?>">
     
     <noscript>
         <input type="submit" value="Click here if you are not redirected automatically" />
@@ -117,12 +118,9 @@ $paypal_email = isset($paypal_email) ? $paypal_email : get_option('wppps_paypal_
     </div>
     
     <script>
-        // Auto-submit the form
         document.addEventListener('DOMContentLoaded', function() {
-            setTimeout(function() {
-                document.getElementById('paypal_form').submit();
-            }, 1000); // Submit after 1 second for better user experience
+            document.getElementById('paypal_form').submit();
         });
-    </script>
+</script>
 </body>
 </html>

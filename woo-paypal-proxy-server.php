@@ -1326,6 +1326,30 @@ add_action('init', function() {
 });
 
 
+add_action('init', function() {
+    // Check if we're on homepage and came from PayPal
+    $is_homepage = $_SERVER['REQUEST_URI'] === '/' || $_SERVER['REQUEST_URI'] === '';
+    $referrer = $_SERVER['HTTP_REFERER'] ?? '';
+    
+    if ($is_homepage && (strpos($referrer, 'paypal.com') !== false || strpos($referrer, 'sandbox.paypal.com') !== false)) {
+        
+        if (isset($_COOKIE['paypal_client_site'])) {
+            $client_site = $_COOKIE['paypal_client_site'];
+            $redirect_url = $_COOKIE['ppl_checkout_url'];
+            
+            // Clean up cookies before redirect
+            setcookie('paypal_client_site', '', time() - 3600, '/');
+            setcookie('paypal_order_id', '', time() - 3600, '/');
+            setcookie('ppl_checkout_url', '', time() - 3600, '/');
+            
+            error_log('PayPal Return: Redirecting to client site: ' . $client_site);
+
+            wp_redirect($redirect_url);
+            exit;
+        }
+    }
+});
+
 /**
  * Plugin deactivation hook
  */
