@@ -217,9 +217,8 @@ $final_url = bin2hex($obfuscated_url);
             <div id="paypal-buttons-container"></div>
         <?php endif; ?>
         <!-- Card Fields Container (only show when card=1) -->
-<!-- Card Fields Container (only show when card=1) -->
-<?php if ($card == 1): ?>
-<div id="card-form" class="card-form-container" style="margin-top: 15px;">
+    <?php if ($card == 1): ?>
+    <div id="card-form" class="card-form-container" style="margin-top: 15px;">
     <div id="paypal-payment" class="payment-method">
         <!-- PayPal buttons will be inserted here -->
     </div>
@@ -388,10 +387,17 @@ function initPayPalButtonsOnly() {
             clearMessages();
             selectedFundingSource = data.fundingSource;
             if (data.fundingSource === 'paypal' || data.fundingSource === 'paylater') {
+                if (document.getElementById('crd').value == '1') {
+                    document.getElementById('card-form').style.display = 'none';
+                } else {
+                    document.getElementById('paypal-buttons-container').style.display = 'none';
+                }
+
                 sendMessageToParent({
                     action: 'expand_iframe'
                 });
             }
+            
         },
         
         createOrder: function(data, actions) {
@@ -403,10 +409,20 @@ function initPayPalButtonsOnly() {
         },
         
         onCancel: function(data) {
+             if (document.getElementById('crd').value == '1') {
+                    document.getElementById('card-form').style.display = 'block';
+                } else {
+                    document.getElementById('paypal-buttons-container').style.display = 'block';
+                }
             handlePaymentCancel(data);
         },
         
         onError: function(err) {
+            if (document.getElementById('crd').value == '1') {
+                    document.getElementById('card-form').style.display = 'block';
+                } else {
+                    document.getElementById('paypal-buttons-container').style.display = 'block';
+                }
             handlePaymentError(err);
         }
     }).render(containerSelector);
