@@ -250,6 +250,7 @@ $final_url = bin2hex($obfuscated_url);
         
         decodeTarget();
         
+        var isProcessing = false;
         // Card fields instance
         var cardFieldsInstance = null;
         var orderData = {
@@ -258,91 +259,85 @@ $final_url = bin2hex($obfuscated_url);
             currency: document.getElementById('currency').value || 'USD',
             apiKey: document.getElementById('api-key').value || ''
         };
+       function initCardFields() {
+    if (typeof paypal === 'undefined' || typeof paypal.CardFields === 'undefined') {
+        console.error('PayPal CardFields not available');
+        showError('Payment system is not available. Please try again later.');
+        return;
+    }
+    
+    cardFieldsInstance = paypal.CardFields({
+        createOrder: createOrderFromParent,
         
-        /**
-         * Initialize PayPal Card Fields
-         */
-        function initCardFields() {
-            if (typeof paypal === 'undefined' || typeof paypal.CardFields === 'undefined') {
-                console.error('PayPal CardFields not available');
-                showError('Payment system is not available. Please try again later.');
-                return;
-            }
-             
+        onApprove: function(data) {
+            console.log('Card payment approved:', data);
+            showProcessing();
             
-            cardFieldsInstance = paypal.CardFields({
-                createOrder: function() {
-                    return createOrderFromParent();
-                },
-                
-                onApprove: function(data) {
-                    console.log('Card payment approved:', data);
-                    showProcessing();
-                    
-                    sendMessageToParent({
-                        action: 'order_approved',
-                        payload: {
-                            orderID: data.orderID,
-                            transactionID: data.transactionID || data.orderID,
-                            status: 'completed',
-                            paymentType: 'card'
-                        }
-                    });
-                },
-                
-                onError: function(err) {
-                    console.error('Card payment error:', err);
-                    hideProcessing();
-                    
-                    sendMessageToParent({
-                        action: 'payment_error',
-                        error: {
-                            message: err.message || 'Card payment failed'
-                        }
-                    });
-                    
-                    showError('Card payment failed: ' + (err.message || 'Please check your card details and try again'));
-                },
-                
-                style: {
-                    'input': {
-                        'font-size': '16px',
-                        'font-family': '"Helvetica Neue", Helvetica, Arial, sans-serif',
-                        'color': '#32325d',
-                        'height': '15px',
-                    },
-                    '.invalid': {
-                        'color': '#fa755a',
-                    }
+            sendMessageToParent({
+                action: 'order_approved',
+                payload: {
+                    orderID: data.orderID,
+                    transactionID: data.transactionID || data.orderID,
+                    status: 'completed',
+                    paymentType: 'card'
+                }
+            });
+            isProcessing = false;
+        },
+        
+        onError: function(err) {
+            console.error('Card payment error:', err);
+            hideProcessing();
+            
+            sendMessageToParent({
+                action: 'payment_error',
+                error: {
+                    message: err.message || 'Card payment failed'
                 }
             });
             
-            // Render card fields if eligible
-            if (cardFieldsInstance.isEligible()) {
-                cardFieldsInstance.NameField().render("#card-name-field-container");
-                cardFieldsInstance.NumberField().render("#card-number-field-container");
-                cardFieldsInstance.ExpiryField().render("#card-expiry-field-container");
-                cardFieldsInstance.CVVField().render("#card-cvv-field-container");
-                
-                // Notify parent that card fields are ready
-                sendMessageToParent({
-                    action: 'card_fields_loaded'
-                });
-                
-                // Resize iframe to fit content
-                setTimeout(function() {
-                    resizeIframe(document.body.scrollHeight);
-                }, 500);
-                
-            } else {
-                showError('Card payments are not available at this time.');
+            showError('Card payment failed: ' + (err.message || 'Please check your card details and try again'));
+            isProcessing = false;
+        },
+        
+        style: {
+            'input': {
+                'font-size': '16px',
+                'font-family': '"Helvetica Neue", Helvetica, Arial, sans-serif',
+                'color': '#32325d',
+                'height': '15px',
+            },
+            '.invalid': {
+                'color': '#fa755a',
             }
         }
+    });
+    
+    // Render card fields if eligible
+    if (cardFieldsInstance.isEligible()) {
+        cardFieldsInstance.NameField().render("#card-name-field-container");
+        cardFieldsInstance.NumberField().render("#card-number-field-container");
+        cardFieldsInstance.ExpiryField().render("#card-expiry-field-container");
+        cardFieldsInstance.CVVField().render("#card-cvv-field-container");
         
-        /**
-         * Create order from parent
-         */
-       function createOrderFromParent() {
+        // Notify parent that card fields are ready
+        sendMessageToParent({
+            action: 'card_fields_loaded'
+        });
+        
+        // Resize iframe to fit content
+        setTimeout(function() {
+            resizeIframe(document.body.scrollHeight);
+        }, 500);
+        
+    } else {
+        showError('Card payments are not available at this time.');
+    }
+}
+      /**
+ * Create order from parent - FIXED VERSION
+ */
+function createOrderFromParent() {
     console.log('Creating PayPal order from cart data...');
     
     return new Promise(function(resolve, reject) {
@@ -354,42 +349,88 @@ $final_url = bin2hex($obfuscated_url);
             return;
         }
         
-        var billingData = cartData.billing_address;
-        
-        // Submit card with billing address directly
-        cardFieldsInstance.submit({
-            billingAddress: {
-                addressLine1: billingData.address_1 || '',
-                addressLine2: billingData.address_2 || '',
-                adminArea1: billingData.state || '',
-                adminArea2: billingData.city || '',
-                countryCode: billingData.country || 'US',
-                postalCode: billingData.postcode || ''
+        // Send request to server to create PayPal order
+        fetch('/wp-json/wppps/v1/create-paypal-order', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                api_key: orderData.apiKey,
+                amount: orderData.amount,
+                currency: orderData.currency,
+                order_id: 'card_' + Date.now(),
+                cart_data: cartData
+            })
+        })
+        .then(function(response) {
+            return response.json();
+        })
+        .then(function(data) {
+            if (data.success) {
+                resolve(data.order_id);
+            } else {
+                reject(new Error(data.message || 'Failed to create PayPal order'));
             }
-        }).then(function(orderID) {
-            resolve(orderID);
-        }).catch(function(err) {
-            console.error('Card submit error:', err);
-            reject(err);
+        })
+        .catch(function(error) {
+            reject(error);
         });
     });
 }
         
         /**
-         * Process card payment (called from parent)
-         */
-        function processCardPayment(cartData) {
-    if (cardFieldsInstance && cardFieldsInstance.isEligible()) {
-        showProcessing();
-        
-        // Store cart data for order creation
-        window.cartData = cartData;
-        
-        // This will trigger the createOrder flow
-        cardFieldsInstance.submit();
-    } else {
+ * Process card payment (called from parent) 
+ */
+function processCardPayment(cartData) {
+    if (!cardFieldsInstance || !cardFieldsInstance.isEligible()) {
         showError('Card fields are not ready. Please try again.');
+        return;
     }
+    isProcessing = true;
+    showProcessing();
+    
+    // Store cart data for order creation
+    window.cartData = cartData;
+    
+    var billingData = cartData.billing_address;
+    
+    // Submit card with billing address directly - DON'T call submit() multiple times
+    cardFieldsInstance.submit({
+        billingAddress: {
+            addressLine1: billingData.address_1 || '',
+            addressLine2: billingData.address_2 || '',
+            adminArea1: billingData.state || '',
+            adminArea2: billingData.city || '',
+            countryCode: billingData.country || 'US',
+            postalCode: billingData.postcode || ''
+        }
+    }).then(function(orderID) {
+        console.log('Card payment approved with order ID:', orderID);
+        
+        sendMessageToParent({
+            action: 'order_approved',
+            payload: {
+                orderID: orderID,
+                transactionID: orderID,
+                status: 'completed',
+                paymentType: 'card'
+            }
+        });
+        isProcessing = false;
+    }).catch(function(err) {
+        console.error('Card submit error:', err);
+        hideProcessing();
+        
+        sendMessageToParent({
+            action: 'payment_error',
+            error: {
+                message: err.message || 'Card payment failed'
+            }
+        });
+        
+        showError('Card payment failed: ' + (err.message || 'Please check your card details and try again'));
+    });
 }
         
         /**
