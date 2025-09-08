@@ -160,6 +160,12 @@ register_rest_route('wppps/v1', '/capture-express-payment', array(
     'callback' => array($this, 'capture_express_payment'),
     'permission_callback' => '__return_true',
 ));
+
+register_rest_route('wppps/v1', '/card-fields', array(
+    'methods' => 'GET',
+    'callback' => array($this, 'get_card_fields'),
+    'permission_callback' => '__return_true',
+));
     
     register_rest_route('wppps/v1', '/seller-protection/(?P<order_id>[A-Za-z0-9]+)', array(
     'methods' => 'GET',
@@ -345,6 +351,65 @@ if (!empty($params['line_items']) && is_array($params['line_items'])) {
 
 		return new WP_REST_Response($results, 200);
 	}
+	
+	/**
+ * Render the Card Fields template (card fields only)
+ */
+public function get_card_fields($request) {
+    // Validate using api key and secret
+    $api_key = $request->get_param('api_key');
+    $api_secret_hash = $request->get_param('hash');
+    $get_timestamp_from_client = $request->get_param('timestamp');
+    $site = null;
+    $site_url = $request->get_param('site_url') ? base64_decode($request->get_param('site_url')) : '';
+    
+    if (!empty($api_key)) {
+        $site = $this->get_site_by_api_key($api_key);
+        if (!$site || $site->site_url != $site_url) {
+            return new WP_Error(
+                'invalid_api_secret',
+                __('Invalid api or secret key', 'woo-paypal-proxy-server'),
+                array('status' => 401)
+            );
+        }
+        
+        $timestamp = $get_timestamp_from_client;
+        $expected_hash = hash_hmac('sha256', $timestamp, $site->api_secret); 
+        
+        // Verify hash
+        if (!hash_equals($expected_hash, $api_secret_hash)) {
+            return new WP_Error(
+                'invalid_hash',
+                __('Invalid authentication hash', 'woo-paypal-proxy-server'),
+                array('status' => 401)
+            );
+        }
+        
+        if (!$site) {
+            header('Content-Type: text/html; charset=UTF-8');
+            echo '<div style="color:red;">Invalid API key. Please check your configuration.</div>';
+            exit;
+        }
+    }
+    
+    // Get parameters
+    $amount = $request->get_param('amount');
+    $currency = $request->get_param('currency') ?: 'USD';
+    
+    // Set up template variables
+    $client_id = $this->paypal_api->get_client_id();
+    $environment = $this->paypal_api->get_environment();
+    
+    //Set the content type header to HTML
+    header('Content-Type: text/html; charset=UTF-8');
+    
+    // Include the card fields template
+    include WPPPS_PLUGIN_DIR . 'templates/card-fields.php';
+    
+    // Exit to prevent WordPress from further processing
+    exit;
+}
+	
 /**
  * Get stored test data for an order
  */
