@@ -1514,7 +1514,7 @@ public function create_express_checkout($request) {
             'user_action' => 'PAY_NOW',
             'return_url' => $return_url,
             'cancel_url' => $cancel_url,
-            'brand_name' => get_bloginfo('name')
+            'brand_name' => "Unlock yout imagination"
         );
         
         error_log('Express Checkout: Creating PayPal order with fixed amount=' . $order_amount . 

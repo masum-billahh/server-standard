@@ -1016,7 +1016,7 @@ public function create_order($amount, $currency = 'USD', $reference_id = '', $re
         $payload['application_context'] = array(
             'shipping_preference' => !empty($custom_data['shipping_address']) ? 'SET_PROVIDED_ADDRESS' : 'GET_FROM_FILE',
             'user_action' => 'PAY_NOW',
-            'brand_name' => get_bloginfo('name')
+            'brand_name' => 'Unlock your imagination'
         );
         
         $return_url = home_url('/checkout/order-received/');
