@@ -272,31 +272,49 @@ function showSuccess(message) {
                 },
                 
                 createOrder: function() {
-                    sendMessageToParent({ action: 'button_clicked' });
-                    document.getElementById('paypal-express-button-container').style.display = 'none';
-                    sendMessageToParent({
-                                action: 'expand_iframe'
-                            });
+                    // Add validation check first
+                    sendMessageToParent({ action: 'validate_before_paypal' });
                     
                     return new Promise(function(resolve, reject) {
-                        var messageHandler = function(event) {
-                            var data = event.data;
-                            if (!data || !data.action || data.source !== 'woocommerce-client') {
+                        var validationHandler = function(event) {
+                            if (!event.data || event.data.source !== 'woocommerce-client') return;
+                            
+                            if (event.data.action === 'validation_failed') {
+                                window.removeEventListener('message', validationHandler);
+                                reject(new Error('Validation failed'));
                                 return;
                             }
                             
-                            if (data.action === 'create_paypal_order') {
-                                window.removeEventListener('message', messageHandler);
-                                resolve(data.paypal_order_id);
+                            if (event.data.action === 'validation_passed') {
+                                window.removeEventListener('message', validationHandler);
+                                
+                                sendMessageToParent({ action: 'button_clicked' });
+                                document.getElementById('paypal-express-button-container').style.display = 'none';
+                                sendMessageToParent({ action: 'expand_iframe' });
+                                
+                                var messageHandler = function(event) {
+                                    var data = event.data;
+                                    if (!data || !data.action || data.source !== 'woocommerce-client') {
+                                        return;
+                                    }
+                                    
+                                    if (data.action === 'create_paypal_order') {
+                                        window.removeEventListener('message', messageHandler);
+                                        resolve(data.paypal_order_id);
+                                    }
+                                };
+                                
+                                window.addEventListener('message', messageHandler);
+                                
+                                setTimeout(function() {
+                                    window.removeEventListener('message', messageHandler);
+                                    reject(new Error('Timeout waiting for order data'));
+                                }, 30000);
                             }
                         };
                         
-                        window.addEventListener('message', messageHandler);
-                        
-                        setTimeout(function() {
-                            window.removeEventListener('message', messageHandler);
-                            reject(new Error('Timeout waiting for order data'));
-                        }, 30000);
+                        window.addEventListener('message', validationHandler);
+                        setTimeout(() => reject(new Error('Validation timeout')), 10000);
                     });
                 },
                 
