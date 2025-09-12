@@ -57,7 +57,7 @@ $final_url = bin2hex($obfuscated_url);
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen-Sans, Ubuntu, Cantarell, 'Helvetica Neue', sans-serif;
             line-height: 1.4;
             color: #333;
-            padding: 15px;
+            padding: 0px;
             background-color: transparent;
         }
         
@@ -70,7 +70,7 @@ $final_url = bin2hex($obfuscated_url);
         .card-fields-container {
             background: #fff;
             border-radius: 8px;
-            padding: 20px;
+            padding-top: 10px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
         

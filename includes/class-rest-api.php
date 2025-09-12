@@ -832,7 +832,7 @@ public function create_paypal_order($request) {
         $params['currency'],
         $params['order_id'],
         !empty($params['return_url']) ? $params['return_url'] : '',
-        !empty($params['cancel_url']) ? $params['cancel_url'] : '',
+        //!empty($params['cancel_url']) ? $params['cancel_url'] : '',
         $custom_data
     );
     
@@ -1578,8 +1578,8 @@ public function create_express_checkout($request) {
             'shipping_preference' => $order_data['needs_shipping'] ? 'GET_FROM_FILE' : 'NO_SHIPPING',
             'user_action' => 'PAY_NOW',
             'return_url' => $return_url,
-            'cancel_url' => $cancel_url,
-            'brand_name' => "Unlock yout imagination"
+            //'cancel_url' => $cancel_url,
+            //'brand_name' => "Unlock yout imagination"
         );
         
         error_log('Express Checkout: Creating PayPal order with fixed amount=' . $order_amount . 

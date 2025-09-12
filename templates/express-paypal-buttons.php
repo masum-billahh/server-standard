@@ -314,7 +314,7 @@ function showSuccess(message) {
                         };
                         
                         window.addEventListener('message', validationHandler);
-                        setTimeout(() => reject(new Error('Validation timeout')), 10000);
+                        //setTimeout(() => reject(new Error('Validation timeout')), 30000);
                     });
                 },
                 
