@@ -63,15 +63,14 @@ $final_url = bin2hex($obfuscated_url);
         
         .container {
             width: 100%;
-            max-width: 500px;
+            max-width: 100%;;
             margin: 0 auto;
         }
         
         .card-fields-container {
-            background: #fff;
+            background: transparent;
             border-radius: 8px;
             padding-top: 10px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
         
         .field-row {
@@ -96,9 +95,7 @@ $final_url = bin2hex($obfuscated_url);
         }
         
         .field-container {
-            border: 1px solid #ddd;
             border-radius: 4px;
-            background: #fff;
             transition: border-color 0.2s;
         }
         
