@@ -74,7 +74,7 @@ $final_url = bin2hex($obfuscated_url);
         }
         
         .field-row {
-            margin-bottom: 15px;
+            margin-bottom: 5px;
         }
         
         .field-row.field-row-split {
@@ -90,7 +90,7 @@ $final_url = bin2hex($obfuscated_url);
             display: block;
             margin-bottom: 5px;
             font-weight: 500;
-            color: #333;
+            color: #000;
             font-size: 14px;
         }
         
@@ -302,7 +302,10 @@ $final_url = bin2hex($obfuscated_url);
                 'font-size': '16px',
                 'font-family': '"Helvetica Neue", Helvetica, Arial, sans-serif',
                 'color': '#32325d',
-                'height': '15px',
+                'height': '58px',
+            },
+            ':focus': {
+                'box-shadow' : 'none',
             },
             '.invalid': {
                 'color': '#fa755a',
