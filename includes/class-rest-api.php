@@ -826,13 +826,17 @@ public function create_paypal_order($request) {
         error_log('Adding discount to PayPal order: ' . $order_data['discount_total']);
     }
     
+    error_log( 'Custom Data: ' . print_r( $custom_data, true ) );
+    
+    $cancelUrl = "";
+    
     // Create PayPal order
     $paypal_order = $this->paypal_api->create_order(
         $params['amount'],
         $params['currency'],
         $params['order_id'],
         !empty($params['return_url']) ? $params['return_url'] : '',
-        //!empty($params['cancel_url']) ? $params['cancel_url'] : '',
+        $cancelUrl,
         $custom_data
     );
     
@@ -2568,30 +2572,31 @@ if (!empty($billing_address_encoded)) {
     $billing_address = json_decode(base64_decode($billing_address_encoded), true);
 }
 
-if (!empty($shipping_address_encoded)) {
-    $shipping_address = json_decode(base64_decode($shipping_address_encoded), true);
-}
-
-// Build PayPal arguments
-$paypal_args = array();
-//$paypal_args['cmd'] = '_cart';
-//$paypal_args['upload'] = '1';
-$paypal_args['currency_code'] = $request->get_param('currency') ?: 'USD';
-$paypal_args['invoice'] = $order_id;
-$paypal_args['address_override'] = $address_override;
-$paypal_args['no_shipping'] = $address_override; // Prevent address change if address_override is set
-
+    if (!empty($shipping_address_encoded)) {
+        $shipping_address = json_decode(base64_decode($shipping_address_encoded), true);
+    }
+    
+    // Build PayPal arguments
+    $paypal_args = array();
+    //$paypal_args['cmd'] = '_cart';
+    //$paypal_args['upload'] = '1';
+    $paypal_args['currency_code'] = $request->get_param('currency') ?: 'USD';
+    $paypal_args['invoice'] = $order_id;
+    $paypal_args['address_override'] = $address_override;
+    $paypal_args['no_shipping'] = $address_override; // Prevent address change if address_override is set
+    
     // Add shipping address if provided
-if ($shipping_address) {
-    $paypal_args['first_name'] = $shipping_address['first_name'];
-    $paypal_args['last_name'] = $shipping_address['last_name'];
-    $paypal_args['address1'] = $shipping_address['address_1'];
-    $paypal_args['address2'] = $shipping_address['address_2'];
-    $paypal_args['city'] = $shipping_address['city'];
-    $paypal_args['state'] = $shipping_address['state'];
-    $paypal_args['zip'] = $shipping_address['postcode'];
-    $paypal_args['country'] = $shipping_address['country'];
-}
+    if ($shipping_address) {
+        // Sanitize and add to $paypal_args
+        $paypal_args['first_name'] = $this->m_limit_length($shipping_address['first_name'], 32);
+        $paypal_args['last_name'] = $this->m_limit_length($shipping_address['last_name'], 64);
+        $paypal_args['address1'] = $this->m_get_paypal_address($shipping_address['address_1'], 100);
+        $paypal_args['address2'] = $this->m_get_paypal_address($shipping_address['address_2'], 100);
+        $paypal_args['city'] = $this->m_get_paypal_address($shipping_address['city'], 40);
+        $paypal_args['state'] = $this->m_get_paypal_state($shipping_address['country'], $shipping_address['state']);
+        $paypal_args['zip'] = $this->m_limit_length($shipping_address['postcode'], 32);
+        $paypal_args['country'] = $this->m_get_paypal_country($shipping_address['country']);
+    }
     
     
     // Add line items if available
@@ -2646,6 +2651,59 @@ if ($shipping_address) {
     //return new WP_REST_Response($html);
     
 }
+
+protected function m_get_paypal_address($address, $limit = 100) {
+    // Remove any HTML
+        $address = wp_strip_all_tags( $address );
+
+        // Remove any special characters that might cause issues
+        $address = preg_replace( '/[^a-zA-Z0-9\s\-.,]/', '', $address );
+
+        return $this->m_limit_length( $address, $limit );
+    }
+
+protected function m_get_paypal_state($country, $state) {
+     if ( 'US' === $country ) {
+            return $state;
+        }
+        $states = WC()->countries->get_states( $country );
+        if ( $states && isset( $states[ $state ] ) ) {
+            return $state;
+        }
+        return '';
+    }
+
+protected function m_get_paypal_country($country) {
+     // PayPal accepts 2-letter ISO country codes
+        if ( strlen( $country ) === 2 ) {
+            return strtoupper( $country );
+        }
+
+        // If we have a longer country code, try to get the 2-letter code
+        $countries = WC()->countries->get_countries();
+        foreach ( $countries as $code => $name ) {
+            if ( $name === $country ) {
+                return strtoupper( $code );
+            }
+        }
+
+        return '';
+    }
+
+protected function m_limit_length($string, $limit = 127) {
+     $str_limit = $limit - 3;
+        if ( function_exists( 'mb_strlen' ) ) {
+            if ( mb_strlen( $string, 'UTF-8' ) > $limit ) {
+                $string = mb_substr( $string, 0, $str_limit, 'UTF-8' ) . '...';
+            }
+        } else {
+            if ( strlen( $string ) > $limit ) {
+                $string = substr( $string, 0, $str_limit ) . '...';
+            }
+        }
+        return $string;
+    }
+
 
 /**
  * Process PayPal Standard IPN notification

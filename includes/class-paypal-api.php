@@ -826,6 +826,8 @@ public function create_order($amount, $currency = 'USD', $reference_id = '', $re
     // Set API endpoint
     $endpoint = $this->api_url . '/v2/checkout/orders';
     
+     error_log( 'Custom Data: ' . print_r( $custom_data, true ) );
+    
     // Express checkout flag
     $is_express = !empty($custom_data['express_checkout']) || !empty($application_context);
     

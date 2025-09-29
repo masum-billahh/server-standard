@@ -18,6 +18,7 @@ $client_cancel_url = isset($client_cancel_url) ? $client_cancel_url : '';
 $security_token = isset($security_token) ? $security_token : '';
 $paypal_args = isset($paypal_args) ? $paypal_args : array();
 $paypal_email = isset($paypal_email) ? $paypal_email : get_option('wppps_paypal_standard_email', '');
+error_log('PayPal Args: ' . print_r($paypal_args, true));
 ?>
 <!DOCTYPE html>
 <html>
