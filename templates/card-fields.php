@@ -256,7 +256,7 @@ $final_url = bin2hex($obfuscated_url);
             currency: document.getElementById('currency').value || 'USD',
             apiKey: document.getElementById('api-key').value || ''
         };
-       function initCardFields() {
+function initCardFields() {
     if (typeof paypal === 'undefined' || typeof paypal.CardFields === 'undefined') {
         console.error('PayPal CardFields not available');
         showError('Payment system is not available. Please try again later.');
@@ -314,22 +314,24 @@ $final_url = bin2hex($obfuscated_url);
     });
     
     // Render card fields if eligible
-    if (cardFieldsInstance.isEligible()) {
-        cardFieldsInstance.NameField().render("#card-name-field-container");
-        cardFieldsInstance.NumberField().render("#card-number-field-container");
-        cardFieldsInstance.ExpiryField().render("#card-expiry-field-container");
-        cardFieldsInstance.CVVField().render("#card-cvv-field-container");
-        
-        // Notify parent that card fields are ready
-        sendMessageToParent({
-            action: 'card_fields_loaded'
-        });
-        
-        // Resize iframe to fit content
-        setTimeout(function() {
-            resizeIframe(document.body.scrollHeight);
-        }, 500);
-        
+   if (cardFieldsInstance.isEligible()) {
+    ["card-name-field-container", "card-number-field-container", "card-expiry-field-container", "card-cvv-field-container"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = "";
+    });
+
+    cardFieldsInstance.NameField().render("#card-name-field-container");
+    cardFieldsInstance.NumberField().render("#card-number-field-container");
+    cardFieldsInstance.ExpiryField().render("#card-expiry-field-container");
+    cardFieldsInstance.CVVField().render("#card-cvv-field-container");
+    
+    // Notify parent that card fields are ready 
+    sendMessageToParent({ action: 'card_fields_loaded' }); 
+    // Resize iframe to fit content 
+    setTimeout(function() {
+        resizeIframe(document.body.scrollHeight); 
+    }, 500);
+    
     } else {
         showError('Card payments are not available at this time.');
     }
