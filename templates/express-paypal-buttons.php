@@ -260,7 +260,26 @@ function showSuccess(message) {
                 return;
             }
             
-            sendMessageToParent({ action: 'button_loaded' });
+            if(window.paypalMessageHandler){
+                window.removeEventListener('message', window.paypalMessageHandler);
+                console.log('removed')
+            }
+
+            // Define the shared handler once
+            window.paypalMessageHandler = function(event) {
+                if (!event.data || event.data.source !== 'woocommerce-client') return;
+        
+                if (event.data.action === 'enable_paypal_button' && window.paypalActions) {
+                    window.paypalActions.enable();
+                }
+                if (event.data.action === 'disable_paypal_button' && window.paypalActions) {
+                    window.paypalActions.disable();
+                }
+            };
+        
+            window.addEventListener('message', window.paypalMessageHandler);
+            
+            //sendMessageToParent({ action: 'button_loaded' });
             
             paypal.Buttons({
                 style: {
@@ -271,50 +290,53 @@ function showSuccess(message) {
                     tagline: false
                 },
                 
-                createOrder: function() {
-                    // Add validation check first
+                onInit: function (data, actions) {
+                    window.paypalActions = actions;
+                    actions.disable();
+                    sendMessageToParent({ action: 'button_loaded' });
+                },
+
+                            
+                
+                onClick: function (data, actions) {
                     sendMessageToParent({ action: 'validate_before_paypal' });
-                    
-                    return new Promise(function(resolve, reject) {
-                        var validationHandler = function(event) {
+                    return new Promise((resolve, reject) => {
+                        const handler = (event) => {
                             if (!event.data || event.data.source !== 'woocommerce-client') return;
-                            
+            
                             if (event.data.action === 'validation_failed') {
-                                window.removeEventListener('message', validationHandler);
+                                window.removeEventListener('message', handler);
                                 reject(new Error('Validation failed'));
-                                return;
                             }
-                            
+            
                             if (event.data.action === 'validation_passed') {
-                                window.removeEventListener('message', validationHandler);
-                                
-                                sendMessageToParent({ action: 'button_clicked' });
-                                document.getElementById('paypal-express-button-container').style.display = 'none';
-                                sendMessageToParent({ action: 'expand_iframe' });
-                                
-                                var messageHandler = function(event) {
-                                    var data = event.data;
-                                    if (!data || !data.action || data.source !== 'woocommerce-client') {
-                                        return;
-                                    }
-                                    
-                                    if (data.action === 'create_paypal_order') {
-                                        window.removeEventListener('message', messageHandler);
-                                        resolve(data.paypal_order_id);
-                                    }
-                                };
-                                
-                                window.addEventListener('message', messageHandler);
-                                
-                                setTimeout(function() {
-                                    window.removeEventListener('message', messageHandler);
-                                    reject(new Error('Timeout waiting for order data'));
-                                }, 30000);
+                                window.removeEventListener('message', handler);
+                                resolve();
                             }
                         };
-                        
-                        window.addEventListener('message', validationHandler);
-                        //setTimeout(() => reject(new Error('Validation timeout')), 30000);
+                        window.addEventListener('message', handler);
+                    });
+                },
+                
+        
+                createOrder: function() {
+                    sendMessageToParent({ action: 'button_clicked' });
+                    document.getElementById('paypal-express-button-container').style.display = 'none';
+                    sendMessageToParent({ action: 'expand_iframe' });
+        
+                    return new Promise(function(resolve, reject) {
+                        const messageHandler = function(event) {
+                            var data = event.data;
+                            if (!data || !data.action || data.source !== 'woocommerce-client') return;
+        
+                            if (data.action === 'create_paypal_order') {
+                                window.removeEventListener('message', messageHandler);
+                                resolve(data.paypal_order_id);
+                            }
+                        };
+        
+                        window.addEventListener('message', messageHandler);
+                        setTimeout(() => reject(new Error('Timeout waiting for order data')), 30000);
                     });
                 },
                 
@@ -370,6 +392,8 @@ function showSuccess(message) {
             }).render('#paypal-express-button-container');
             
             setTimeout(resizeIframe, 500);
+
+            
         }
         
         if (document.readyState === 'loading') {
