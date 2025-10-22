@@ -1,11 +1,11 @@
 <?php
 /**
  * Plugin Name: WooCommerce PayPal Proxy Server
- * Plugin URI: https://yourwebsite.com
+ * Plugin URI: 
  * Description: Serves as a proxy for PayPal payments from external WooCommerce stores
- * Version: 4.4.0
- * Author: Masum Bilah
- * Author URI: https://yourwebsite.com
+ * Version: 4.5.1
+ * Author: 
+ * Author URI: 
  * Text Domain: woo-paypal-proxy-server
  * Domain Path: /languages
  * WC requires at least: 5.0.0
